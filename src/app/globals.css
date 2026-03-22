@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+:root {
+  --tts-primary: #384a8f;
+  --tts-secondary: #e39f3c;
+  --tts-bg: #f5f7fa;
+}
+
+body {
+  background: var(--tts-bg);
+  color: #1a1a2e;
+  font-family: 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+}
+
+/* スクロールバー */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c4c4c4; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a0a0a0; }
