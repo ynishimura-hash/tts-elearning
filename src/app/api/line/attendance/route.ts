@@ -8,8 +8,8 @@ function getSupabase() {
   )
 }
 
-async function sendLineMessage(lineUserId: string, message: string) {
-  if (!LINE_CHANNEL_ACCESS_TOKEN) {
+async function sendLineMessage(lineUserId: string, message: string, token: string | undefined) {
+  if (!token) {
     console.log(`[LINE未設定] To: ${lineUserId}, Message: ${message}`)
     return false
   }
@@ -18,7 +18,7 @@ async function sendLineMessage(lineUserId: string, message: string) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`,
+      'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify({
       to: lineUserId,
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       for (const user of targetUsers) {
         if (user.line_user_id) {
           const message = `【リマインド】${session.title}\n\n${sessionDate}\n${session.session_time || ''}\n\nまだ出欠のご回答をいただいておりません。\nお手数ですがご回答をお願いいたします。`
-          const sent = await sendLineMessage(user.line_user_id, message)
+          const sent = await sendLineMessage(user.line_user_id, message, LINE_CHANNEL_ACCESS_TOKEN)
           if (sent) sentCount++
         }
       }
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
             : (session.location ? `\n場所: ${session.location}` : '')
 
           const message = `【勉強会のご案内】\n\n${session.title}\n日時: ${sessionDate}\n時間: ${session.session_time || '未定'}${locationInfo}\n\n出欠のご回答をお願いいたします。`
-          const sent = await sendLineMessage(user.line_user_id, message)
+          const sent = await sendLineMessage(user.line_user_id, message, LINE_CHANNEL_ACCESS_TOKEN)
           if (sent) sentCount++
         }
       }
