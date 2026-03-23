@@ -6,7 +6,8 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { YouTubePlayer } from '@/components/YouTubePlayer'
-import { ArrowLeft, Play, CheckCircle2, FileText, ChevronRight } from 'lucide-react'
+import { getYouTubeId } from '@/lib/utils'
+import { ArrowLeft, Play, CheckCircle2, FileText, Clock } from 'lucide-react'
 import type { Course, Content } from '@/types/database'
 
 export default function CourseDetailPage() {
@@ -37,7 +38,6 @@ export default function CourseDetailPage() {
 
       if (contentsData) setContents(contentsData)
 
-      // 完了済みコンテンツ
       const { data: progress } = await supabase
         .from('user_progress')
         .select('content_id')
@@ -78,7 +78,8 @@ export default function CourseDetailPage() {
         )}
         <div className="flex items-center gap-4 text-sm text-gray-500">
           <span>{contents.length}コンテンツ</span>
-          <span>進捗 {percent}%</span>
+          <span>{completedCount}完了</span>
+          <span className="font-medium text-[#384a8f]">{percent}%</span>
         </div>
         <div className="mt-3 w-full h-2 bg-gray-200 rounded-full overflow-hidden">
           <div
@@ -96,54 +97,86 @@ export default function CourseDetailPage() {
         </div>
       )}
 
-      {/* コンテンツ一覧 */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <div className="p-5 border-b">
-          <h2 className="text-lg font-bold text-gray-800">コンテンツ一覧</h2>
-        </div>
-        <div className="divide-y">
+      {/* コンテンツ一覧 - サムネイルカード形式 */}
+      <div>
+        <h2 className="text-lg font-bold text-gray-800 mb-4">コンテンツ一覧</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {contents.map((content, index) => {
             const isCompleted = completedIds.has(content.id)
             const hasQuiz = !!content.quiz_question
+            const youtubeId = getYouTubeId(content.youtube_url)
+            const thumbnailUrl = youtubeId
+              ? `https://img.youtube.com/vi/${youtubeId}/mqdefault.jpg`
+              : null
 
             return (
               <Link
                 key={content.id}
                 href={`/courses/${id}/contents/${content.id}`}
-                className="flex items-center gap-4 p-4 hover:bg-gray-50 transition-colors"
+                className="group bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-all hover:-translate-y-0.5"
               >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  isCompleted ? 'bg-green-100' : 'bg-gray-100'
-                }`}>
-                  {isCompleted ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                {/* サムネイル */}
+                <div className="relative aspect-video bg-gray-100">
+                  {thumbnailUrl ? (
+                    <img
+                      src={thumbnailUrl}
+                      alt={content.name}
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
-                    <span className="text-sm font-medium text-gray-500">{index + 1}</span>
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#384a8f]/10 to-[#384a8f]/5">
+                      <FileText className="w-10 h-10 text-[#384a8f]/30" />
+                    </div>
+                  )}
+                  {/* 再生オーバーレイ */}
+                  {content.youtube_url && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-colors">
+                      <div className="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Play className="w-5 h-5 text-[#384a8f] ml-0.5" />
+                      </div>
+                    </div>
+                  )}
+                  {/* 完了バッジ */}
+                  {isCompleted && (
+                    <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                  )}
+                  {/* 番号 */}
+                  <div className="absolute top-2 left-2 bg-black/60 text-white text-xs font-bold px-2 py-1 rounded">
+                    {index + 1}
+                  </div>
+                  {/* 再生時間 */}
+                  {content.duration && (
+                    <div className="absolute bottom-2 right-2 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                      <Clock className="w-2.5 h-2.5" />{content.duration}
+                    </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`font-medium truncate ${isCompleted ? 'text-gray-500' : 'text-gray-800'}`}>
+
+                {/* カード情報 */}
+                <div className="p-3">
+                  <p className="text-sm font-medium text-gray-800 line-clamp-2 leading-snug mb-2">
                     {content.name}
                   </p>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     {content.youtube_url && (
-                      <span className="inline-flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                        <Play className="w-3 h-3" /> 動画
+                      <span className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                        <Play className="w-2.5 h-2.5" /> 動画
                       </span>
                     )}
                     {content.slide_url && (
-                      <span className="inline-flex items-center gap-1 text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
-                        <FileText className="w-3 h-3" /> スライド
+                      <span className="inline-flex items-center gap-0.5 text-[10px] text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+                        <FileText className="w-2.5 h-2.5" /> スライド
                       </span>
                     )}
                     {hasQuiz && (
-                      <span className="inline-flex items-center gap-1 text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded">
+                      <span className="text-[10px] text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
                         小テスト
                       </span>
                     )}
                   </div>
                 </div>
-                <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
               </Link>
             )
           })}

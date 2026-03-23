@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Users, BookOpen, CalendarDays, FileText, Bell, UserPlus, ChevronRight } from 'lucide-react'
+import { Users, BookOpen, CalendarDays, FileText, Bell, UserPlus, ChevronRight, HelpCircle } from 'lucide-react'
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -12,37 +12,55 @@ export default function AdminDashboard() {
     onlineUsers: 0,
     freeUsers: 0,
     totalCourses: 0,
+    onlineCourses: 0,
+    offlineCourses: 0,
     totalContents: 0,
     pendingApplications: 0,
     upcomingSessions: 0,
+    totalAnnouncements: 0,
+    totalFaqs: 0,
   })
+  const [recentApps, setRecentApps] = useState<{ id: string; full_name: string; course_type: string; created_at: string }[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const supabase = createClient()
 
     async function fetchStats() {
-      const [users, courses, contents, apps, sessions] = await Promise.all([
+      const [users, courses, contents, apps, sessions, announcements, faqs, recentApplications] = await Promise.all([
         supabase.from('users').select('is_online, is_free_user, is_admin'),
-        supabase.from('courses').select('id', { count: 'exact', head: true }),
+        supabase.from('courses').select('id, is_online'),
         supabase.from('contents').select('id', { count: 'exact', head: true }),
         supabase.from('applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         supabase.from('study_sessions').select('id', { count: 'exact', head: true })
           .gte('session_date', new Date().toISOString()),
+        supabase.from('announcements').select('id', { count: 'exact', head: true }),
+        supabase.from('faqs').select('id', { count: 'exact', head: true }),
+        supabase.from('applications').select('id, full_name, course_type, created_at')
+          .eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
       ])
 
       const userData = users.data || []
       const nonAdmin = userData.filter(u => !u.is_admin)
+      const courseData = courses.data || []
 
       setStats({
         totalUsers: nonAdmin.length,
         offlineUsers: nonAdmin.filter(u => !u.is_online && !u.is_free_user).length,
         onlineUsers: nonAdmin.filter(u => u.is_online).length,
         freeUsers: nonAdmin.filter(u => u.is_free_user).length,
-        totalCourses: courses.count || 0,
+        totalCourses: courseData.length,
+        onlineCourses: courseData.filter(c => c.is_online).length,
+        offlineCourses: courseData.filter(c => !c.is_online).length,
         totalContents: contents.count || 0,
         pendingApplications: apps.count || 0,
         upcomingSessions: sessions.count || 0,
+        totalAnnouncements: announcements.count || 0,
+        totalFaqs: faqs.count || 0,
       })
+
+      if (recentApplications.data) setRecentApps(recentApplications.data)
+      setLoading(false)
     }
 
     fetchStats()
@@ -50,19 +68,33 @@ export default function AdminDashboard() {
 
   const cards = [
     { label: '総ユーザー数', value: stats.totalUsers, icon: Users, color: 'bg-blue-100 text-blue-600', href: '/admin/users' },
-    { label: '対面受講生', value: stats.offlineUsers, icon: Users, color: 'bg-green-100 text-green-600', href: '/admin/users' },
-    { label: 'オンライン受講生', value: stats.onlineUsers, icon: Users, color: 'bg-purple-100 text-purple-600', href: '/admin/users' },
-    { label: '無料特典ユーザー', value: stats.freeUsers, icon: Users, color: 'bg-gray-100 text-gray-600', href: '/admin/users' },
-    { label: 'コース数', value: stats.totalCourses, icon: BookOpen, color: 'bg-indigo-100 text-indigo-600', href: '/admin/courses' },
+    { label: '対面受講生', value: stats.offlineUsers, icon: Users, color: 'bg-green-100 text-green-600', href: '/admin/users?filter=offline' },
+    { label: 'オンライン受講生', value: stats.onlineUsers, icon: Users, color: 'bg-purple-100 text-purple-600', href: '/admin/users?filter=online' },
+    { label: '無料特典ユーザー', value: stats.freeUsers, icon: Users, color: 'bg-gray-100 text-gray-600', href: '/admin/users?filter=free' },
+    { label: 'コース数', value: stats.totalCourses, sub: `対面${stats.offlineCourses} / オンライン${stats.onlineCourses}`, icon: BookOpen, color: 'bg-indigo-100 text-indigo-600', href: '/admin/courses' },
     { label: 'コンテンツ数', value: stats.totalContents, icon: FileText, color: 'bg-orange-100 text-orange-600', href: '/admin/courses' },
-    { label: '未処理の申込', value: stats.pendingApplications, icon: UserPlus, color: 'bg-red-100 text-red-600', href: '/admin/applications' },
+    { label: '未処理の申込', value: stats.pendingApplications, icon: UserPlus, color: stats.pendingApplications > 0 ? 'bg-red-100 text-red-600 ring-2 ring-red-200' : 'bg-red-100 text-red-600', href: '/admin/applications' },
     { label: '今後の勉強会', value: stats.upcomingSessions, icon: CalendarDays, color: 'bg-teal-100 text-teal-600', href: '/admin/study-sessions' },
   ]
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin w-8 h-8 border-4 border-[#384a8f] border-t-transparent rounded-full" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6 pt-12 lg:pt-0">
-      <h1 className="text-2xl font-bold text-gray-800">管理者ダッシュボード</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-800">管理者ダッシュボード</h1>
+        <span className="text-sm text-gray-500">
+          {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}
+        </span>
+      </div>
 
+      {/* 統計カード */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((card) => {
           const Icon = card.icon
@@ -76,6 +108,7 @@ export default function AdminDashboard() {
                 <div>
                   <p className="text-sm text-gray-500">{card.label}</p>
                   <p className="text-2xl font-bold text-gray-800">{card.value}</p>
+                  {'sub' in card && card.sub && <p className="text-xs text-gray-400">{card.sub}</p>}
                 </div>
               </div>
             </Link>
@@ -83,38 +116,61 @@ export default function AdminDashboard() {
         })}
       </div>
 
-      {/* クイックアクション */}
-      <div className="bg-white rounded-xl p-5 shadow-sm">
-        <h2 className="text-lg font-bold text-gray-800 mb-4">クイックアクション</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Link href="/admin/study-sessions" className="flex items-center justify-between p-4 rounded-lg border hover:bg-gray-50 transition-colors">
-            <div className="flex items-center gap-3">
-              <CalendarDays className="w-5 h-5 text-[#384a8f]" />
-              <span className="font-medium">勉強会を管理する</span>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 未処理の申込 */}
+        <div className="bg-white rounded-xl p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-800">未処理の申込</h2>
+            <Link href="/admin/applications" className="text-sm text-[#384a8f] hover:underline">
+              すべて見る
+            </Link>
+          </div>
+          {recentApps.length > 0 ? (
+            <div className="space-y-3">
+              {recentApps.map((app) => (
+                <div key={app.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium text-gray-800 text-sm">{app.full_name}</p>
+                    <p className="text-xs text-gray-500">
+                      {app.course_type === 'offline' ? '対面' : 'オンライン'} /
+                      {new Date(app.created_at).toLocaleDateString('ja-JP')}
+                    </p>
+                  </div>
+                  <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">未処理</span>
+                </div>
+              ))}
             </div>
-            <ChevronRight className="w-4 h-4 text-gray-400" />
-          </Link>
-          <Link href="/admin/applications" className="flex items-center justify-between p-4 rounded-lg border hover:bg-gray-50 transition-colors">
-            <div className="flex items-center gap-3">
-              <UserPlus className="w-5 h-5 text-[#384a8f]" />
-              <span className="font-medium">申込を確認する</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-gray-400" />
-          </Link>
-          <Link href="/admin/blog/new" className="flex items-center justify-between p-4 rounded-lg border hover:bg-gray-50 transition-colors">
-            <div className="flex items-center gap-3">
-              <FileText className="w-5 h-5 text-[#384a8f]" />
-              <span className="font-medium">ブログ記事を投稿する</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-gray-400" />
-          </Link>
-          <Link href="/admin/users" className="flex items-center justify-between p-4 rounded-lg border hover:bg-gray-50 transition-colors">
-            <div className="flex items-center gap-3">
-              <Users className="w-5 h-5 text-[#384a8f]" />
-              <span className="font-medium">受講生の進捗を確認する</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-gray-400" />
-          </Link>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-4">未処理の申込はありません</p>
+          )}
+        </div>
+
+        {/* クイックアクション */}
+        <div className="bg-white rounded-xl p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">クイックアクション</h2>
+          <div className="grid grid-cols-1 gap-2">
+            {[
+              { href: '/admin/courses', icon: BookOpen, label: 'コースを管理する' },
+              { href: '/admin/announcements', icon: Bell, label: 'お知らせを管理する' },
+              { href: '/admin/study-sessions', icon: CalendarDays, label: '勉強会を管理する' },
+              { href: '/admin/applications', icon: UserPlus, label: '申込を確認する' },
+              { href: '/admin/blog/new', icon: FileText, label: 'ブログ記事を投稿する' },
+              { href: '/admin/qa', icon: HelpCircle, label: 'Q&Aを管理する' },
+              { href: '/admin/users', icon: Users, label: '受講生の進捗を確認する' },
+            ].map((item) => {
+              const Icon = item.icon
+              return (
+                <Link key={item.href} href={item.href}
+                  className="flex items-center justify-between p-3 rounded-lg border hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <Icon className="w-5 h-5 text-[#384a8f]" />
+                    <span className="font-medium text-sm">{item.label}</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                </Link>
+              )
+            })}
+          </div>
         </div>
       </div>
     </div>

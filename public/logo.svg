@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Chart bars -->
+  <rect x="40" y="120" width="30" height="50" rx="4" fill="#384a8f"/>
+  <rect x="80" y="85" width="30" height="85" rx="4" fill="#384a8f"/>
+  <rect x="120" y="50" width="30" height="120" rx="4" fill="#384a8f"/>
+  <!-- Arrow -->
+  <path d="M45 145 L85 110 L125 75 L165 35" stroke="#e39f3c" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <polygon points="155,25 175,30 165,48" fill="#e39f3c"/>
+</svg>

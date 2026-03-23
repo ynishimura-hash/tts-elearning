@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
   Home, BookOpen, Wrench, HelpCircle, MessageSquare, User,
-  Menu, X, LogOut, Users, CalendarDays
+  Menu, X, LogOut, Users, CalendarDays, Bell, FileText, UserPlus
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -37,10 +37,11 @@ const navItems: Record<NavMode, { href: string; label: string; icon: React.Eleme
     { href: '/admin', label: 'ダッシュボード', icon: Home },
     { href: '/admin/users', label: 'ユーザー管理', icon: Users },
     { href: '/admin/courses', label: 'コース管理', icon: BookOpen },
+    { href: '/admin/announcements', label: 'お知らせ管理', icon: Bell },
     { href: '/admin/study-sessions', label: '勉強会管理', icon: CalendarDays },
-    { href: '/admin/blog', label: 'ブログ管理', icon: MessageSquare },
+    { href: '/admin/blog', label: 'ブログ管理', icon: FileText },
     { href: '/admin/qa', label: 'Q&A管理', icon: HelpCircle },
-    { href: '/admin/applications', label: '申込管理', icon: User },
+    { href: '/admin/applications', label: '申込管理', icon: UserPlus },
   ],
   free: [
     { href: '/free/home', label: 'ホーム', icon: Home },
@@ -85,9 +86,7 @@ export function Navigation({ mode }: { mode: NavMode }) {
       )}>
         <div className="flex items-center justify-between p-4 border-b border-white/20">
           <Link href={items[0].href} className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-[#e39f3c] rounded-lg flex items-center justify-center font-bold text-sm">
-              TTS
-            </div>
+            <img src="/logo-icon.png" alt="TTS" className="w-8 h-8 object-contain" />
             <span className="font-bold text-lg">TTS e-ラーニング</span>
           </Link>
           <button onClick={() => setMobileOpen(false)} className="lg:hidden">

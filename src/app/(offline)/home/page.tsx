@@ -7,7 +7,10 @@ import { useUser } from '@/lib/hooks/useUser'
 import { ProgressBar } from '@/components/ProgressBar'
 import { BookOpen, CalendarDays, TrendingUp, Bell, ChevronRight } from 'lucide-react'
 import { formatDate, daysSince } from '@/lib/utils'
+import { PieChart, Pie, ResponsiveContainer } from 'recharts'
 import type { Course, StudySession, Announcement } from '@/types/database'
+
+const CHART_COLORS = ['#384a8f', '#e39f3c', '#22c55e', '#8b5cf6', '#ef4444', '#06b6d4', '#f59e0b', '#ec4899']
 
 export default function HomePage() {
   const { user, loading: userLoading } = useUser()
@@ -16,6 +19,7 @@ export default function HomePage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [totalContents, setTotalContents] = useState(0)
   const [completedContents, setCompletedContents] = useState(0)
+  const [courseProgress, setCourseProgress] = useState<{ name: string; done: number; total: number }[]>([])
 
   useEffect(() => {
     if (!user) return
@@ -75,6 +79,31 @@ export default function HomePage() {
 
       setTotalContents(total || 0)
       setCompletedContents(completed || 0)
+
+      // コースごとの進捗
+      if (coursesData) {
+        const { data: allContents } = await supabase
+          .from('contents')
+          .select('id, course_id')
+          .eq('is_online', false)
+
+        const { data: userProgress } = await supabase
+          .from('user_progress')
+          .select('content_id')
+          .eq('user_id', user!.id)
+          .eq('completed', true)
+
+        const completedSet = new Set(userProgress?.map(p => p.content_id) || [])
+
+        if (allContents) {
+          const progress = coursesData.map(course => {
+            const courseContents = allContents.filter(c => c.course_id === course.id)
+            const done = courseContents.filter(c => completedSet.has(c.id)).length
+            return { name: course.name, done, total: courseContents.length }
+          }).filter(p => p.total > 0)
+          setCourseProgress(progress)
+        }
+      }
     }
 
     fetchData()
@@ -90,15 +119,20 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6 pt-12 lg:pt-0">
-      {/* ヘッダー */}
-      <div className="bg-gradient-to-r from-[#384a8f] to-[#4a5ea8] rounded-2xl p-6 text-white">
-        <h1 className="text-2xl font-bold mb-1">
-          おかえりなさい、{user?.full_name || user?.username}さん
-        </h1>
-        <p className="text-white/70 text-sm">
-          受講開始から {daysSince(user?.account_issued_at || null)} 日目
-          {user?.is_debuted && ' ・ デビュー済み'}
-        </p>
+      {/* ヒーローバナー */}
+      <div className="relative rounded-2xl overflow-hidden">
+        <img src="/hero-banner.png" alt="TTS" className="w-full h-48 md:h-56 object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent flex items-end p-6">
+          <div>
+            <h1 className="text-2xl font-bold text-white mb-1">
+              おかえりなさい、{user?.full_name || user?.username}さん
+            </h1>
+            <p className="text-white/80 text-sm">
+              受講開始から {daysSince(user?.account_issued_at || null)} 日目
+              {user?.is_debuted && ' ・ デビュー済み'}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* 統計カード */}
@@ -156,53 +190,127 @@ export default function HomePage() {
             お知らせ
           </h2>
           <div className="space-y-3">
-            {announcements.map((ann) => (
-              <a
-                key={ann.id}
-                href={ann.link_url || '#'}
-                target={ann.link_url ? '_blank' : undefined}
-                rel="noopener noreferrer"
-                className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <div>
-                  <p className="font-medium text-gray-800">{ann.title}</p>
-                  <p className="text-sm text-gray-500">{formatDate(ann.created_at)}</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-gray-400" />
-              </a>
-            ))}
+            {announcements.map((ann) => {
+              const Wrapper = ann.link_url ? 'a' : Link
+              const wrapperProps = ann.link_url
+                ? { href: ann.link_url, target: '_blank', rel: 'noopener noreferrer' }
+                : { href: '/study-sessions' }
+
+              return (
+                <Wrapper
+                  key={ann.id}
+                  {...(wrapperProps as any)}
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  <div>
+                    <p className="font-medium text-gray-800">{ann.title}</p>
+                    <p className="text-sm text-gray-500">{formatDate(ann.created_at)}</p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400" />
+                </Wrapper>
+              )
+            })}
           </div>
         </div>
       )}
 
-      {/* コース一覧（クイックアクセス） */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-gray-800">コース一覧</h2>
-          <Link href="/courses" className="text-sm text-[#384a8f] hover:underline">
-            すべて見る
-          </Link>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {courses.slice(0, 6).map((course) => (
-            <Link
-              key={course.id}
-              href={`/courses/${course.id}`}
-              className="bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-12 h-12 bg-[#384a8f]/10 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <BookOpen className="w-6 h-6 text-[#384a8f]" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-bold text-gray-800 truncate">{course.name}</h3>
-                  {course.description && (
-                    <p className="text-sm text-gray-500 mt-1 line-clamp-2">{course.description}</p>
-                  )}
-                </div>
+      {/* コース進捗 + コース一覧 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* 左: 進捗円グラフ */}
+        <div className="lg:col-span-1">
+          <div className="bg-white rounded-xl p-6 shadow-sm">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">学習進捗</h2>
+            <div className="relative w-40 h-40 mx-auto mb-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={[{ name: '完了', value: completedContents, fill: '#384a8f' }]}
+                    cx="50%" cy="50%"
+                    innerRadius={45} outerRadius={65}
+                    startAngle={90} endAngle={90 - (completedContents / Math.max(totalContents, 1)) * 360}
+                    dataKey="value"
+                    stroke="none"
+                    isAnimationActive={false}
+                  />
+                  <Pie
+                    data={[{ name: 'bg', value: 1, fill: '#e5e7eb' }]}
+                    cx="50%" cy="50%"
+                    innerRadius={45} outerRadius={65}
+                    dataKey="value"
+                    stroke="none"
+                    isAnimationActive={false}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-2xl font-bold text-[#384a8f]">
+                  {totalContents > 0 ? Math.round((completedContents / totalContents) * 100) : 0}%
+                </span>
+                <span className="text-xs text-gray-400">全体進捗</span>
               </div>
+            </div>
+
+            {/* コースごとの進捗バー */}
+            <div className="space-y-3">
+              {courseProgress.map((cp, i) => {
+                const pct = cp.total > 0 ? Math.round((cp.done / cp.total) * 100) : 0
+                return (
+                  <div key={i}>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-gray-600 truncate mr-2">{cp.name}</span>
+                      <span className="text-gray-500 flex-shrink-0">{cp.done}/{cp.total}</span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* 右: コース一覧 */}
+        <div className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-800">コース一覧</h2>
+            <Link href="/courses" className="text-sm text-[#384a8f] hover:underline">
+              すべて見る
             </Link>
-          ))}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {courses.slice(0, 6).map((course, i) => {
+              const cp = courseProgress.find(p => p.name === course.name)
+              const pct = cp && cp.total > 0 ? Math.round((cp.done / cp.total) * 100) : 0
+
+              return (
+                <Link
+                  key={course.id}
+                  href={`/courses/${course.id}`}
+                  className="bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
+                      style={{ backgroundColor: `${CHART_COLORS[i % CHART_COLORS.length]}15` }}>
+                      <BookOpen className="w-6 h-6" style={{ color: CHART_COLORS[i % CHART_COLORS.length] }} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-bold text-gray-800 truncate">{course.name}</h3>
+                      <div className="flex items-center gap-2 mt-2">
+                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+                        </div>
+                        <span className="text-xs text-gray-500 flex-shrink-0">{pct}%</span>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
         </div>
       </div>
     </div>

@@ -28,6 +28,7 @@ export interface User {
   curriculum: string | null
   auto_read_path: string | null
   auto_read_permitted: boolean
+  is_test: boolean
   created_at: string
   updated_at: string
 }
@@ -66,6 +67,7 @@ export interface Content {
   quiz_option_4: string | null
   quiz_answer: string | null
   quiz_explanation: string | null
+  duration: string | null
   is_required: boolean
   notes: string | null
   is_online: boolean
