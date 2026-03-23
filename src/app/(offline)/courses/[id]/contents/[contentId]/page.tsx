@@ -210,14 +210,12 @@ export default function ContentViewPage() {
 
         {/* 動画エリア */}
         {content.youtube_url && (
-          <div className="bg-black">
-            <YouTubePlayer
-              url={content.youtube_url}
-              title={content.name}
-              onEnded={handleVideoEnded}
-              autoplay
-            />
-          </div>
+          <YouTubePlayer
+            url={content.youtube_url}
+            title={content.name}
+            onEnded={handleVideoEnded}
+            autoplay
+          />
         )}
 
         {/* コンテンツ詳細 */}

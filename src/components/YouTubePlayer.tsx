@@ -76,6 +76,8 @@ export function YouTubePlayer({
 
     playerRef.current = new window.YT.Player(el.id, {
       videoId,
+      width: '100%',
+      height: '100%',
       playerVars: {
         autoplay: autoplay ? 1 : 0,
         modestbranding: 1,
@@ -108,6 +110,6 @@ export function YouTubePlayer({
   }
 
   return (
-    <div ref={containerRef} className="aspect-video rounded-xl overflow-hidden" />
+    <div ref={containerRef} className="aspect-video rounded-xl overflow-hidden [&_iframe]:w-full [&_iframe]:h-full" />
   )
 }

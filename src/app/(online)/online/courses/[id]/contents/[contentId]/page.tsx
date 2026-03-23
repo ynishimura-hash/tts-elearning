@@ -135,14 +135,12 @@ export default function OnlineContentViewPage() {
         </div>
 
         {content.youtube_url && (
-          <div className="bg-black">
-            <YouTubePlayer
-              url={content.youtube_url}
-              title={content.name}
-              onEnded={handleVideoEnded}
-              autoplay
-            />
-          </div>
+          <YouTubePlayer
+            url={content.youtube_url}
+            title={content.name}
+            onEnded={handleVideoEnded}
+            autoplay
+          />
         )}
 
         <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6 pb-24">
