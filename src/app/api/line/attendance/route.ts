@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
       await supabase
         .from('study_session_attendance')
         .update({
-          reminder_count: supabase.rpc ? 1 : 1,
+          reminder_count: 1,
           last_reminder_at: new Date().toISOString(),
         })
         .eq('session_id', sessionId)
