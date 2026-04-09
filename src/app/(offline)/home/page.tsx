@@ -121,8 +121,8 @@ export default function HomePage() {
     <div className="space-y-6 pt-12 lg:pt-0">
       {/* ヒーローバナー */}
       <div className="relative rounded-2xl overflow-hidden">
-        <img src="/hero-banner.png" alt="TTS" className="w-full h-48 md:h-56 object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent flex items-end p-6">
+        <img src="/hero-banner.png" alt="TTS" className="w-full object-contain" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-6">
           <div>
             <h1 className="text-2xl font-bold text-white mb-1">
               おかえりなさい、{user?.full_name || user?.username}さん

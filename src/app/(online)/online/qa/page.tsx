@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { HelpCircle, ChevronDown, ExternalLink } from 'lucide-react'
+import { HelpCircle, ChevronDown, ExternalLink, Search } from 'lucide-react'
 import type { FAQ } from '@/types/database'
 
 export default function OnlineQAPage() {
   const [faqs, setFaqs] = useState<FAQ[]>([])
   const [openId, setOpenId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     const supabase = createClient()
@@ -23,8 +24,18 @@ export default function OnlineQAPage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-800">よくある質問（Q&A）</h1>
       </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="キーワードで検索..."
+          className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none bg-white" />
+      </div>
       <div className="space-y-3">
-        {faqs.map((faq) => (
+        {faqs.filter(f => {
+          if (!search) return true
+          const s = search.toLowerCase()
+          return f.question.toLowerCase().includes(s) || f.answer.toLowerCase().includes(s)
+        }).map((faq) => (
           <div key={faq.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
             <button onClick={() => setOpenId(openId === faq.id ? null : faq.id)} className="w-full flex items-start justify-between p-5 text-left">
               <span className="font-medium text-gray-800 pr-4">{faq.question}</span>

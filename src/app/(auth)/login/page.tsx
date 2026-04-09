@@ -127,11 +127,6 @@ export default function LoginPage() {
             {loading ? 'ログイン中...' : 'ログイン'}
           </button>
 
-          <div className="text-center">
-            <Link href="/apply" className="text-sm text-[#384a8f] hover:underline">
-              受講のお申し込みはこちら
-            </Link>
-          </div>
         </form>
       </div>
     </div>

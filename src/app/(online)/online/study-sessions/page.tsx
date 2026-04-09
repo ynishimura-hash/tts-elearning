@@ -46,6 +46,16 @@ export default function OnlineStudySessionsPage() {
     }))
   }
 
+  async function handleNotesUpdate(sessionId: string, notes: string) {
+    if (!user) return
+    const supabase = createClient()
+    await supabase.from('study_session_attendance').update({ notes }).eq('session_id', sessionId).eq('user_id', user.id)
+    setAttendance(prev => ({
+      ...prev,
+      [sessionId]: { ...prev[sessionId], notes } as StudySessionAttendance,
+    }))
+  }
+
   const now = new Date()
   const upcoming = sessions.filter(s => new Date(s.session_date) >= now)
   const past = sessions.filter(s => new Date(s.session_date) < now)
@@ -108,6 +118,18 @@ export default function OnlineStudySessionsPage() {
                       <p className="text-xs text-orange-600 mt-2 flex items-center gap-1">
                         <HelpCircle className="w-3 h-3" /> まだ出欠を回答していません
                       </p>
+                    )}
+                    {att && (
+                      <div className="mt-3">
+                        <label className="text-xs text-gray-500 mb-1 block">備考（途中参加・遅刻等）</label>
+                        <input
+                          type="text"
+                          placeholder="例：30分遅れて参加します"
+                          defaultValue={att.notes || ''}
+                          onBlur={(e) => handleNotesUpdate(session.id, e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#384a8f] focus:border-transparent outline-none"
+                        />
+                      </div>
                     )}
                   </div>
                 </div>

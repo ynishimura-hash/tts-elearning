@@ -40,18 +40,21 @@ export default function StudySessionsPage() {
     fetchData()
   }, [user])
 
-  async function handleAttendance(sessionId: string, status: 'attending' | 'absent') {
+  async function handleAttendance(sessionId: string, status: 'attending' | 'absent', notes?: string) {
     if (!user) return
     const supabase = createClient()
 
+    const payload: Record<string, unknown> = {
+      session_id: sessionId,
+      user_id: user.id,
+      status,
+      responded_at: new Date().toISOString(),
+    }
+    if (notes !== undefined) payload.notes = notes
+
     await supabase
       .from('study_session_attendance')
-      .upsert({
-        session_id: sessionId,
-        user_id: user.id,
-        status,
-        responded_at: new Date().toISOString(),
-      }, { onConflict: 'session_id,user_id' })
+      .upsert(payload, { onConflict: 'session_id,user_id' })
 
     setAttendance(prev => ({
       ...prev,
@@ -60,8 +63,27 @@ export default function StudySessionsPage() {
         session_id: sessionId,
         user_id: user.id,
         status,
+        notes: notes ?? prev[sessionId]?.notes ?? null,
         responded_at: new Date().toISOString(),
       } as StudySessionAttendance,
+    }))
+  }
+
+  async function handleNotesUpdate(sessionId: string, notes: string) {
+    if (!user) return
+    const supabase = createClient()
+    const att = attendance[sessionId]
+    if (!att) return
+
+    await supabase
+      .from('study_session_attendance')
+      .update({ notes })
+      .eq('session_id', sessionId)
+      .eq('user_id', user.id)
+
+    setAttendance(prev => ({
+      ...prev,
+      [sessionId]: { ...prev[sessionId], notes } as StudySessionAttendance,
     }))
   }
 
@@ -151,6 +173,20 @@ export default function StudySessionsPage() {
                         <HelpCircle className="w-3 h-3" />
                         まだ出欠を回答していません
                       </p>
+                    )}
+
+                    {/* 備考欄（途中参加など） */}
+                    {att && (
+                      <div className="mt-3">
+                        <label className="text-xs text-gray-500 mb-1 block">備考（途中参加・遅刻等）</label>
+                        <input
+                          type="text"
+                          placeholder="例：30分遅れて参加します"
+                          defaultValue={att.notes || ''}
+                          onBlur={(e) => handleNotesUpdate(session.id, e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#384a8f] focus:border-transparent outline-none"
+                        />
+                      </div>
                     )}
                   </div>
                 </div>

@@ -56,7 +56,7 @@ export default function AdminStudySessionsPage() {
     setEditingId(session.id)
     setForm({
       title: session.title,
-      session_date: session.session_date ? session.session_date.split('T')[0] + 'T' + (session.session_date.split('T')[1] || '00:00').substring(0, 5) : '',
+      session_date: session.session_date ? new Date(session.session_date).toISOString().slice(0, 16) : '',
       session_time: session.session_time || '',
       location: session.location || '',
       zoom_url: session.zoom_url || '',
@@ -65,6 +65,7 @@ export default function AdminStudySessionsPage() {
       max_participants: session.max_participants ? String(session.max_participants) : '',
     })
     setShowForm(true)
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -370,6 +371,7 @@ export default function AdminStudySessionsPage() {
                       <tr className="text-left text-xs text-gray-500 uppercase">
                         <th className="pb-2">名前</th>
                         <th className="pb-2">ステータス</th>
+                        <th className="pb-2">備考</th>
                         <th className="pb-2">回答日</th>
                       </tr>
                     </thead>
@@ -387,6 +389,7 @@ export default function AdminStudySessionsPage() {
                               {{ attending: '出席', absent: '欠席', undecided: '未定', pending: '未回答' }[a.status]}
                             </span>
                           </td>
+                          <td className="py-2 text-gray-500 text-xs">{(a as any).notes || '-'}</td>
                           <td className="py-2 text-gray-500">{a.responded_at ? formatDate(a.responded_at) : '-'}</td>
                         </tr>
                       ))}

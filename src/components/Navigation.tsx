@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
-  Home, BookOpen, Wrench, HelpCircle, MessageSquare, User,
+  Home, BookOpen, Wrench, HelpCircle, MessageSquare, User, TrendingUp,
   Menu, X, LogOut, Users, CalendarDays, Bell, FileText, UserPlus
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -21,6 +21,7 @@ const navItems: Record<NavMode, { href: string; label: string; icon: React.Eleme
     { href: '/questions', label: '質問受付', icon: MessageSquare },
     { href: '/consultation', label: '個別相談', icon: Users },
     { href: '/qa', label: 'Q&A', icon: HelpCircle },
+    { href: '/simulation', label: '資金シミュレーション', icon: TrendingUp },
     { href: '/mypage', label: 'マイページ', icon: User },
   ],
   online: [
@@ -31,6 +32,7 @@ const navItems: Record<NavMode, { href: string; label: string; icon: React.Eleme
     { href: '/online/questions', label: '質問受付', icon: MessageSquare },
     { href: '/online/consultation', label: '個別相談', icon: Users },
     { href: '/online/qa', label: 'Q&A', icon: HelpCircle },
+    { href: '/online/simulation', label: '資金シミュレーション', icon: TrendingUp },
     { href: '/online/mypage', label: 'マイページ', icon: User },
   ],
   admin: [
@@ -39,6 +41,8 @@ const navItems: Record<NavMode, { href: string; label: string; icon: React.Eleme
     { href: '/admin/courses', label: 'コース管理', icon: BookOpen },
     { href: '/admin/announcements', label: 'お知らせ管理', icon: Bell },
     { href: '/admin/study-sessions', label: '勉強会管理', icon: CalendarDays },
+    { href: '/admin/questions', label: '質問管理', icon: MessageSquare },
+    { href: '/admin/consultations', label: '個別相談', icon: Users },
     { href: '/admin/blog', label: 'ブログ管理', icon: FileText },
     { href: '/admin/qa', label: 'Q&A管理', icon: HelpCircle },
     { href: '/admin/applications', label: '申込管理', icon: UserPlus },

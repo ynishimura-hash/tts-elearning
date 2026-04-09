@@ -29,9 +29,10 @@ export default function ContentViewPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [courseName, setCourseName] = useState('')
 
-  // contentId変更時にリセット
+  // contentId変更時にリセット＆最上部にスクロール
   useEffect(() => {
     autoNavigateRef.current = false
+    window.scrollTo(0, 0)
   }, [contentId])
 
   useEffect(() => {

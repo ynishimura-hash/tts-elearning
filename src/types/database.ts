@@ -150,6 +150,7 @@ export interface StudySessionAttendance {
   user_id: string
   status: 'pending' | 'attending' | 'absent' | 'undecided'
   responded_at: string | null
+  notes: string | null
   reminder_count: number
   last_reminder_at: string | null
   created_at: string

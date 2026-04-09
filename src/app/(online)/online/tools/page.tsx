@@ -3,9 +3,20 @@
 import { Wrench, ExternalLink } from 'lucide-react'
 
 const tools = [
-  { name: 'ピークボトムプログラムツール', description: 'テクニカル分析のピークボトム判定を自動で行うツールです。', applyRequired: true },
-  { name: 'TradingView', description: 'チャート分析用のプラットフォーム。無料プランでも利用可能です。', url: 'https://www.tradingview.com' },
-  { name: '売買記録表テンプレート', description: 'トレードの記録を残すためのテンプレートです。' },
+  {
+    name: 'ピークボトムプログラムツール',
+    description: 'テクニカル分析のピークボトム判定を自動で行うツールです。',
+    applyInfo: '公式LINEにて下記のような文言でご連絡ください。\n\n例：\n反対線ピークボトムツールの利用申請です。\nアカウント名：XXXX',
+  },
+  {
+    name: 'TradingView',
+    description: 'チャート分析用のプラットフォーム。無料プランでも利用可能です。\n※ただし、王道ルールなど、チャートを4画面で検証する場合はPlusプラン以上の有料プランで検証を行う必要があります。',
+    url: 'https://www.tradingview.com',
+  },
+  {
+    name: '売買記録表テンプレート',
+    description: 'トレードの記録を残すためのテンプレートです。Google スプレッドシートで利用できます。',
+  },
 ]
 
 export default function OnlineToolsPage() {
@@ -21,16 +32,19 @@ export default function OnlineToolsPage() {
         {tools.map((tool) => (
           <div key={tool.name} className="bg-white rounded-xl p-6 shadow-sm">
             <h2 className="text-lg font-bold text-gray-800 mb-2">{tool.name}</h2>
-            <p className="text-gray-600 text-sm mb-4">{tool.description}</p>
-            {tool.url ? (
-              <a href={tool.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline">
+            <p className="text-gray-600 text-sm mb-4 whitespace-pre-line">{tool.description}</p>
+            {tool.url && (
+              <a href={tool.url} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline">
                 ツールを開く <ExternalLink className="w-3 h-3" />
               </a>
-            ) : tool.applyRequired ? (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                <p className="text-sm text-yellow-700">利用申請が必要です。LINEにてお申し込みください。</p>
+            )}
+            {tool.applyInfo && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-800 font-medium mb-2">利用申請方法</p>
+                <p className="text-sm text-yellow-700 whitespace-pre-line">{tool.applyInfo}</p>
               </div>
-            ) : null}
+            )}
           </div>
         ))}
       </div>

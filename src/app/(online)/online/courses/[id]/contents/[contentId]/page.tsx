@@ -31,6 +31,7 @@ export default function OnlineContentViewPage() {
 
   useEffect(() => {
     autoNavigateRef.current = false
+    window.scrollTo(0, 0)
   }, [contentId])
 
   useEffect(() => {
