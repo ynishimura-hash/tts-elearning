@@ -10,7 +10,8 @@ export default function OnlineSimulationPage() {
   const { user } = useUser()
   const [initial, setInitial] = useState(1000000)
   const [rate, setRate] = useState(5)
-  const [years, setYears] = useState(5)
+  const [years, setYears] = useState(2)
+  const [goalAmount, setGoalAmount] = useState(0)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [chartType, setChartType] = useState<'area' | 'bar'>('area')
@@ -76,6 +77,22 @@ export default function OnlineSimulationPage() {
   const totalProfit = finalCapital - initial
   const multiplier = initial > 0 ? (finalCapital / initial).toFixed(1) : '0'
 
+  // 目標金額達成月を計算
+  const goalReachMonth = useMemo(() => {
+    if (goalAmount <= 0 || goalAmount <= initial) return null
+    const found = data.find(d => d.capital >= goalAmount)
+    if (found) return found
+    // データ範囲外の場合は追加計算
+    let capital = initial
+    for (let i = 1; i <= 360; i++) {
+      capital += capital * (rate / 100)
+      if (capital >= goalAmount) {
+        return { month: i, label: `${Math.floor(i / 12)}年${i % 12}ヶ月`, capital: Math.round(capital) }
+      }
+    }
+    return null
+  }, [data, goalAmount, initial, rate])
+
   const formatYen = (v: number) => {
     if (v >= 100000000) return `${(v / 100000000).toFixed(1)}億`
     if (v >= 10000) return `${Math.round(v / 10000).toLocaleString()}万`
@@ -137,6 +154,41 @@ export default function OnlineSimulationPage() {
             </div>
           </div>
         </div>
+
+        {/* 目標金額 */}
+        <div className="mt-4 pt-4 border-t">
+          <label className="block text-sm font-medium text-gray-700 mb-2">目標金額（任意）</label>
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1 max-w-xs">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">¥</span>
+              <input type="number" value={goalAmount || ''} onChange={(e) => setGoalAmount(Number(e.target.value))}
+                placeholder="例: 10000000"
+                className="w-full pl-8 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#e39f3c] outline-none font-bold" />
+            </div>
+            <div className="flex gap-1">
+              {[5000000, 10000000, 50000000, 100000000].map(v => (
+                <button key={v} onClick={() => setGoalAmount(v)}
+                  className={`px-2 py-1 text-xs rounded ${goalAmount === v ? 'bg-[#e39f3c] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  {formatYen(v)}円
+                </button>
+              ))}
+            </div>
+          </div>
+          {goalReachMonth && (
+            <div className="mt-3 bg-gradient-to-r from-[#e39f3c]/10 to-[#384a8f]/10 rounded-lg p-4 flex items-center gap-3">
+              <div className="text-3xl">🎯</div>
+              <div>
+                <p className="text-sm text-gray-600">目標金額 <span className="font-bold text-[#e39f3c]">{formatYen(goalAmount)}円</span> 達成予定</p>
+                <p className="text-lg font-bold text-[#384a8f]">{goalReachMonth.label}後（{goalReachMonth.month}ヶ月目）</p>
+                <p className="text-xs text-gray-500">その時点の資産: ¥{goalReachMonth.capital.toLocaleString()}</p>
+              </div>
+            </div>
+          )}
+          {goalAmount > 0 && !goalReachMonth && (
+            <p className="mt-2 text-sm text-gray-400">30年以内には達成できない見込みです</p>
+          )}
+        </div>
+
         <div className="flex items-center justify-between mt-4 pt-4 border-t">
           <button onClick={handleSave} disabled={saving || !user}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
