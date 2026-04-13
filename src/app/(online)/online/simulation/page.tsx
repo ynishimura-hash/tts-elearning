@@ -129,10 +129,10 @@ export default function OnlineSimulationPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">月利 (%)</label>
-            <input type="number" step="0.1" value={rate} onChange={(e) => setRate(Number(e.target.value))}
+            <input type="number" step="1" value={rate} onChange={(e) => setRate(Number(e.target.value))}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none text-lg font-bold" />
             <div className="flex gap-1 mt-2">
-              {[1, 3, 5, 10].map(v => (
+              {[10, 20, 30, 40].map(v => (
                 <button key={v} onClick={() => setRate(v)}
                   className={`px-2 py-1 text-xs rounded ${rate === v ? 'bg-[#384a8f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                   {v}%
