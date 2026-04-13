@@ -112,11 +112,12 @@ export default function SimulationPage() {
       <div className="bg-white rounded-xl p-6 shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">初期資金</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">初期資金（万円）</label>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">¥</span>
-              <input type="number" value={initial} onChange={(e) => setInitial(Number(e.target.value))}
-                className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none text-lg font-bold" />
+              <input type="number" step="10" min="0" value={Math.round(initial / 10000)}
+                onChange={(e) => setInitial(Number(e.target.value) * 10000)}
+                className="w-full pl-4 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none text-lg font-bold" />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">万円</span>
             </div>
             <div className="flex gap-1 mt-2">
               {[500000, 1000000, 3000000, 5000000].map(v => (
