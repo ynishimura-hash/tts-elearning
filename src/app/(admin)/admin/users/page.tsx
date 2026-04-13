@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Search, Eye, Edit, Save, X, Shield, ShieldOff, Trash2 } from 'lucide-react'
+import { Search, Eye, Edit, Save, X, Shield, ShieldOff, Trash2, ChevronDown, ChevronUp, CheckCircle2, Circle } from 'lucide-react'
 import { formatDate, daysSince } from '@/lib/utils'
 import { ProgressBar } from '@/components/ProgressBar'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
@@ -24,13 +24,15 @@ export default function AdminUsersPage() {
     is_test: false, drive_folder_url: '',
   })
   const [saving, setSaving] = useState(false)
-  const [userCourseProgress, setUserCourseProgress] = useState<{ name: string; done: number; total: number }[]>([])
+  const [userCourseProgress, setUserCourseProgress] = useState<{ name: string; done: number; total: number; courseId: string }[]>([])
+  const [courseContentDetail, setCourseContentDetail] = useState<Record<string, { name: string; completed: boolean; completedAt: string | null }[]>>({})
+  const [expandedCourse, setExpandedCourse] = useState<string | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
   // ユーザー詳細表示時にコースごと進捗を取得
   useEffect(() => {
-    if (!selectedUser) { setUserCourseProgress([]); return }
+    if (!selectedUser) { setUserCourseProgress([]); setCourseContentDetail({}); setExpandedCourse(null); return }
     const supabase = createClient()
     async function fetchUserProgress() {
       const isOnline = selectedUser!.is_online
@@ -40,22 +42,41 @@ export default function AdminUsersPage() {
       if (!courses) return
 
       const { data: allContents } = await supabase
-        .from('contents').select('id, course_id')
+        .from('contents').select('id, course_id, name, sort_order')
         .in('course_id', courses.map(c => c.id))
+        .order('sort_order')
 
       const { data: userProg } = await supabase
-        .from('user_progress').select('content_id')
-        .eq('user_id', selectedUser!.id).eq('completed', true)
+        .from('user_progress').select('content_id, completed, completed_at')
+        .eq('user_id', selectedUser!.id)
 
-      const completedSet = new Set(userProg?.map(p => p.content_id) || [])
+      const progMap: Record<string, { completed: boolean; completed_at: string | null }> = {}
+      userProg?.forEach(p => { progMap[p.content_id] = { completed: p.completed, completed_at: p.completed_at } })
 
       if (allContents) {
+        const completedSet = new Set(userProg?.filter(p => p.completed).map(p => p.content_id) || [])
+
         const progress = courses.map(course => {
           const courseContents = allContents.filter(c => c.course_id === course.id)
           const done = courseContents.filter(c => completedSet.has(c.id)).length
-          return { name: course.name, done, total: courseContents.length }
+          return { name: course.name, done, total: courseContents.length, courseId: course.id }
         }).filter(p => p.total > 0)
         setUserCourseProgress(progress)
+
+        // コースごとのコンテンツ詳細
+        const detail: Record<string, { name: string; completed: boolean; completedAt: string | null }[]> = {}
+        courses.forEach(course => {
+          const contents = allContents
+            .filter(c => c.course_id === course.id)
+            .sort((a, b) => a.sort_order - b.sort_order)
+            .map(c => ({
+              name: c.name,
+              completed: completedSet.has(c.id),
+              completedAt: progMap[c.id]?.completed_at || null,
+            }))
+          if (contents.length > 0) detail[course.id] = contents
+        })
+        setCourseContentDetail(detail)
       }
     }
     fetchUserProgress()
@@ -290,8 +311,8 @@ export default function AdminUsersPage() {
 
       {/* ユーザー詳細モーダル */}
       {selectedUser && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelectedUser(null)}>
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setSelectedUser(null)}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 my-8" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-800">{selectedUser.full_name}</h2>
               <button onClick={() => setSelectedUser(null)} className="p-2 hover:bg-gray-100 rounded-lg">
@@ -346,24 +367,88 @@ export default function AdminUsersPage() {
                       </span>
                     </div>
                   </div>
-                  {/* コースバー */}
+                  {/* コースバー（クリックで展開） */}
                   <div className="flex-1 space-y-2">
                     {userCourseProgress.map((cp, i) => {
                       const pct = cp.total > 0 ? Math.round((cp.done / cp.total) * 100) : 0
+                      const isOpen = expandedCourse === cp.courseId
                       return (
-                        <div key={i}>
-                          <div className="flex items-center justify-between text-xs mb-0.5">
-                            <span className="text-gray-600 truncate mr-2">{cp.name}</span>
-                            <span className="text-gray-500 flex-shrink-0">{cp.done}/{cp.total}</span>
+                        <button
+                          key={cp.courseId}
+                          type="button"
+                          onClick={() => setExpandedCourse(isOpen ? null : cp.courseId)}
+                          className={`w-full text-left p-2 rounded-lg transition-colors ${isOpen ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                        >
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="text-gray-700 truncate mr-2 flex items-center gap-1">
+                              {isOpen ? <ChevronUp className="w-3 h-3 flex-shrink-0" /> : <ChevronDown className="w-3 h-3 flex-shrink-0" />}
+                              {cp.name}
+                            </span>
+                            <span className="text-gray-500 flex-shrink-0 font-medium">{cp.done}/{cp.total} ({pct}%)</span>
                           </div>
                           <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+                            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
                           </div>
-                        </div>
+                        </button>
                       )
                     })}
                   </div>
                 </div>
+
+                {/* 展開中のコースのコンテンツ一覧 */}
+                {expandedCourse && courseContentDetail[expandedCourse] && (
+                  <div className="mt-4 bg-gray-50 rounded-lg p-3 border border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-xs font-bold text-gray-600 uppercase tracking-wide">
+                        {userCourseProgress.find(c => c.courseId === expandedCourse)?.name} - コンテンツ一覧
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCourse(null)}
+                        className="text-xs text-gray-400 hover:text-gray-600"
+                      >
+                        閉じる
+                      </button>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto space-y-1">
+                      {courseContentDetail[expandedCourse].map((content, idx) => (
+                        <div
+                          key={idx}
+                          className={`flex items-center justify-between gap-2 py-1.5 px-2 rounded text-xs ${
+                            content.completed ? 'bg-green-50' : 'bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            {content.completed ? (
+                              <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+                            ) : (
+                              <Circle className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                            )}
+                            <span className={`text-gray-500 font-mono w-6 flex-shrink-0 text-right`}>{idx + 1}.</span>
+                            <span className={`truncate ${content.completed ? 'text-gray-700' : 'text-gray-500'}`}>
+                              {content.name}
+                            </span>
+                          </div>
+                          {content.completedAt && (
+                            <span className="text-xs text-gray-400 flex-shrink-0">
+                              {formatDate(content.completedAt)}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
+                      <span>
+                        <CheckCircle2 className="inline w-3 h-3 text-green-600 mr-1" />
+                        視聴済み: {courseContentDetail[expandedCourse].filter(c => c.completed).length}本
+                      </span>
+                      <span>
+                        <Circle className="inline w-3 h-3 text-gray-300 mr-1" />
+                        未視聴: {courseContentDetail[expandedCourse].filter(c => !c.completed).length}本
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
