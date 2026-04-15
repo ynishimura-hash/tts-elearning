@@ -7,6 +7,7 @@ interface Tool {
   name: string
   description: string
   url?: string
+  linkLabel?: string
   applyInfo?: string
   unavailableNote?: string
 }
@@ -29,6 +30,7 @@ export default function ToolsPage() {
       name: '売買記録表テンプレート',
       description: 'トレードの記録を残すためのテンプレートです。Google スプレッドシートで利用できます。',
       url: user?.drive_folder_url ?? undefined,
+      linkLabel: 'フォルダに移動',
       unavailableNote: user && !user.drive_folder_url
         ? '売買記録表のGoogle Driveリンクがまだ登録されていません。運営までお問い合わせください。'
         : undefined,
@@ -52,7 +54,7 @@ export default function ToolsPage() {
             {tool.url && (
               <a href={tool.url} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline">
-                ツールを開く <ExternalLink className="w-3 h-3" />
+                {tool.linkLabel || 'ツールを開く'} <ExternalLink className="w-3 h-3" />
               </a>
             )}
             {tool.unavailableNote && !loading && (

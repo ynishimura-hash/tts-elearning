@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
-import { Calculator, Save, TrendingUp, Minus, Plus } from 'lucide-react'
+import { Calculator, Save, TrendingUp } from 'lucide-react'
 
 const MAN = 10000
 const STEP_MAN = 10 // 10万円刻み
@@ -163,26 +163,13 @@ export default function SimulationPage() {
         <div className="mt-4 pt-4 border-t">
           <label className="block text-sm font-medium text-gray-700 mb-2">目標金額（任意）</label>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1">
-              <button type="button"
-                onClick={() => setGoalAmount(Math.max(0, Math.floor(goalAmount / MAN / STEP_MAN) * STEP_MAN * MAN - STEP_MAN * MAN))}
-                disabled={goalAmount <= 0}
-                className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
-                <Minus className="w-4 h-4 text-gray-600" />
-              </button>
-              <div className="relative">
-                <input type="number" step={STEP_MAN} min={0}
-                  value={goalAmount ? Math.round(goalAmount / MAN) : ''}
-                  onChange={(e) => setGoalAmount(Number(e.target.value) * MAN)}
-                  placeholder="例: 1000"
-                  className="w-32 pl-4 pr-12 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#e39f3c] outline-none font-bold text-right" />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">万円</span>
-              </div>
-              <button type="button"
-                onClick={() => setGoalAmount((Math.floor(goalAmount / MAN / STEP_MAN) * STEP_MAN + STEP_MAN) * MAN)}
-                className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50">
-                <Plus className="w-4 h-4 text-gray-600" />
-              </button>
+            <div className="relative">
+              <input type="number" step={STEP_MAN} min={0}
+                value={goalAmount ? Math.round(goalAmount / MAN) : ''}
+                onChange={(e) => setGoalAmount(Number(e.target.value) * MAN)}
+                placeholder="例: 1000"
+                className="w-40 pl-4 pr-12 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#e39f3c] outline-none font-bold text-right" />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">万円</span>
             </div>
             <div className="flex gap-1 flex-wrap">
               {[500, 1000, 5000, 10000].map(v => (

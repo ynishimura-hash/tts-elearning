@@ -14,8 +14,15 @@ interface Consultation {
   scheduled_date: string | null
   admin_notes: string | null
   is_online: boolean
+  plan: string | null
+  payment_status: string | null
   created_at: string
   user?: { full_name: string; email: string }
+}
+
+const PLAN_LABEL: Record<string, string> = {
+  '1h_22000': '1時間 22,000円',
+  '3h_55000': '3時間パック 55,000円',
 }
 
 export default function AdminConsultationsPage() {
@@ -49,6 +56,14 @@ export default function AdminConsultationsPage() {
   async function updateStatus(id: string, status: string) {
     const supabase = createClient()
     await supabase.from('consultations').update({ status }).eq('id', id)
+    fetchData()
+  }
+
+  // 決済ステータス切替
+  async function togglePayment(id: string, current: string | null) {
+    const next = current === 'paid' ? 'unpaid' : 'paid'
+    const supabase = createClient()
+    await supabase.from('consultations').update({ payment_status: next }).eq('id', id)
     fetchData()
   }
 
@@ -124,10 +139,22 @@ export default function AdminConsultationsPage() {
                     <p className="font-bold text-gray-800 text-lg">{(c.user as any)?.full_name || '不明'}</p>
                     <p className="text-xs text-gray-500">{(c.user as any)?.email} ・ 申込: {formatDate(c.created_at)}</p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
                     <span className={`text-xs px-2 py-0.5 rounded ${c.is_online ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
                       {c.is_online ? 'オンライン' : '対面'}
                     </span>
+                    {c.plan && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+                        {PLAN_LABEL[c.plan] || c.plan}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => togglePayment(c.id, c.payment_status)}
+                      className={`text-xs px-2 py-0.5 rounded hover:opacity-80 transition-opacity ${c.payment_status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}
+                      title="クリックで決済ステータス切替">
+                      決済: {c.payment_status === 'paid' ? '済' : '未確認'}
+                    </button>
                     <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded ${config.color}`}>
                       <StatusIcon className="w-3 h-3" /> {config.label}
                     </span>
