@@ -5,8 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { Users, CheckCircle2, Plus, X, ExternalLink } from 'lucide-react'
 
-const PAYPAL_1H = 'https://docs.google.com/forms/d/e/1FAIpQLSetGC_kPUp08bT0Xl94T6YspI7eX0ZV674TAJQM5QAu8gHEwg/viewform'
-const PAYPAL_3H = 'https://docs.google.com/forms/d/e/1FAIpQLScXBZTyAxHEODAU6FZcvOjmoiDN_j7JaStjLhQBtG-pm1usQg/viewform'
+const PAYMENT_1H = 'https://docs.google.com/forms/d/e/1FAIpQLSetGC_kPUp08bT0Xl94T6YspI7eX0ZV674TAJQM5QAu8gHEwg/viewform'
+const PAYMENT_3H = 'https://docs.google.com/forms/d/e/1FAIpQLScXBZTyAxHEODAU6FZcvOjmoiDN_j7JaStjLhQBtG-pm1usQg/viewform'
 
 type Plan = '1h_22000' | '3h_55000'
 
@@ -16,8 +16,8 @@ const PLAN_LABEL: Record<Plan, string> = {
 }
 
 const PLAN_URL: Record<Plan, string> = {
-  '1h_22000': PAYPAL_1H,
-  '3h_55000': PAYPAL_3H,
+  '1h_22000': PAYMENT_1H,
+  '3h_55000': PAYMENT_3H,
 }
 
 interface TimeSlot {
@@ -41,9 +41,12 @@ export default function OnlineConsultationPage() {
   const [plan, setPlan] = useState<Plan>('1h_22000')
   const [slots, setSlots] = useState<TimeSlot[]>([{ ...emptySlot }])
   const [message, setMessage] = useState('')
-  const [submitted, setSubmitted] = useState<Plan | null>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [consultationId, setConsultationId] = useState<string | null>(null)
+  const [submittedPlan, setSubmittedPlan] = useState<Plan | null>(null)
+  const [confirmingPaid, setConfirmingPaid] = useState(false)
+  const [done, setDone] = useState(false)
 
   const addSlot = () => setSlots([...slots, { ...emptySlot }])
   const removeSlot = (i: number) => setSlots(slots.filter((_, idx) => idx !== i))
@@ -75,42 +78,40 @@ export default function OnlineConsultationPage() {
 
     setSaving(true)
     const supabase = createClient()
-    const { error: err } = await supabase.from('consultations').insert({
+    const { data, error: err } = await supabase.from('consultations').insert({
       user_id: user.id,
       preferred_dates: filled.map(formatSlot),
       message: message.trim(),
       plan,
       is_online: true,
-    })
+    }).select('id').single()
     setSaving(false)
 
-    if (err) {
-      setError('送信に失敗しました: ' + err.message)
+    if (err || !data) {
+      setError('送信に失敗しました: ' + (err?.message || '不明なエラー'))
       return
     }
 
-    setSubmitted(plan)
+    setConsultationId(data.id)
+    setSubmittedPlan(plan)
   }
 
-  if (submitted) {
+  async function handleConfirmPaid() {
+    if (!consultationId) return
+    setConfirmingPaid(true)
+    const supabase = createClient()
+    await supabase.from('consultations').update({ payment_status: 'paid' }).eq('id', consultationId)
+    setConfirmingPaid(false)
+    setDone(true)
+  }
+
+  if (done) {
     return (
       <div className="space-y-6 pt-12 lg:pt-0 max-w-3xl mx-auto">
         <div className="bg-white rounded-xl p-6 sm:p-8 shadow-sm text-center space-y-4">
           <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto" />
-          <h2 className="text-xl font-bold text-gray-800">申込を受け付けました</h2>
-          <p className="text-gray-600 text-sm leading-relaxed">
-            続いてPayPalで決済をお願いいたします。<br />
-            決済完了後、担当者から日程調整のご連絡をさせていただきます。
-          </p>
-          <a
-            href={PLAN_URL[submitted]}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-8 py-4 bg-[#384a8f] text-white rounded-lg font-medium hover:bg-[#2d3d75] transition-colors"
-          >
-            PayPalで決済に進む（{PLAN_LABEL[submitted]}）
-            <ExternalLink className="w-4 h-4" />
-          </a>
+          <h2 className="text-xl font-bold text-gray-800">お申し込みが完了しました</h2>
+          <p className="text-gray-600 text-sm">担当者から日程調整のご連絡をさせていただきます。しばらくお待ちください。</p>
         </div>
       </div>
     )
@@ -202,10 +203,54 @@ export default function OnlineConsultationPage() {
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button type="submit" disabled={saving}
             className="w-full py-3 bg-[#384a8f] text-white rounded-lg font-medium hover:bg-[#2d3d75] transition-colors disabled:opacity-50">
-            {saving ? '送信中...' : '申し込む'}
+            {saving ? '送信中...' : '決済に進む'}
           </button>
         </form>
       </div>
+
+      {consultationId && submittedPlan && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => { /* 背景クリックでは閉じない（誤操作防止） */ }}
+        >
+          <div
+            className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b">
+              <h2 className="font-bold text-gray-800">決済へお進みください</h2>
+            </div>
+            <div className="p-5 space-y-4 text-sm text-gray-700">
+              <p>下記のボタンから決済ページを開き、お支払いを完了してください。</p>
+              <a
+                href={PLAN_URL[submittedPlan]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full px-6 py-4 bg-[#ffc439] text-[#003087] rounded-lg font-bold hover:brightness-95 transition-all"
+              >
+                PayPalで支払う（{PLAN_LABEL[submittedPlan]}）
+                <ExternalLink className="w-4 h-4" />
+              </a>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-900 leading-relaxed">
+                決済完了後、このページに戻り、下の「決済完了」ボタンを押してください。
+              </div>
+              <button
+                onClick={handleConfirmPaid}
+                disabled={confirmingPaid}
+                className="w-full py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+              >
+                {confirmingPaid ? '処理中...' : '決済完了'}
+              </button>
+              <button
+                onClick={() => { setConsultationId(null); setSubmittedPlan(null) }}
+                className="w-full py-2 text-sm text-gray-500 hover:text-gray-700"
+              >
+                あとで決済する（閉じる）
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
