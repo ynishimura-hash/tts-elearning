@@ -1,25 +1,40 @@
 'use client'
 
 import { Wrench, ExternalLink } from 'lucide-react'
+import { useUser } from '@/lib/hooks/useUser'
 
-const tools = [
-  {
-    name: 'ピークボトムプログラムツール',
-    description: 'テクニカル分析のピークボトム判定を自動で行うツールです。',
-    applyInfo: '公式LINEにて下記のような文言でご連絡ください。\n\n例：\nピークボトムツールの利用申請です。\nアカウント名：XXXX',
-  },
-  {
-    name: 'TradingView',
-    description: 'チャート分析用のプラットフォーム。無料プランでも利用可能です。\n※ただし、王道ルールなど、チャートを4画面で検証する場合はPlusプラン以上の有料プランで検証を行う必要があります。',
-    url: 'https://www.tradingview.com',
-  },
-  {
-    name: '売買記録表テンプレート',
-    description: 'トレードの記録を残すためのテンプレートです。Google スプレッドシートで利用できます。',
-  },
-]
+interface Tool {
+  name: string
+  description: string
+  url?: string
+  applyInfo?: string
+  unavailableNote?: string
+}
 
 export default function ToolsPage() {
+  const { user, loading } = useUser()
+
+  const tools: Tool[] = [
+    {
+      name: 'ピークボトムプログラムツール',
+      description: 'テクニカル分析のピークボトム判定を自動で行うツールです。',
+      applyInfo: '公式LINEにて下記のような文言でご連絡ください。\n\n例：\nピークボトムツールの利用申請です。\nアカウント名：XXXX',
+    },
+    {
+      name: 'TradingView',
+      description: 'チャート分析用のプラットフォーム。無料プランでも利用可能です。\n※ただし、王道ルールなど、チャートを4画面で検証する場合はPlusプラン以上の有料プランで検証を行う必要があります。',
+      url: 'https://www.tradingview.com',
+    },
+    {
+      name: '売買記録表テンプレート',
+      description: 'トレードの記録を残すためのテンプレートです。Google スプレッドシートで利用できます。',
+      url: user?.drive_folder_url ?? undefined,
+      unavailableNote: user && !user.drive_folder_url
+        ? '売買記録表のGoogle Driveリンクがまだ登録されていません。運営までお問い合わせください。'
+        : undefined,
+    },
+  ]
+
   return (
     <div className="space-y-6 pt-12 lg:pt-0 max-w-3xl mx-auto">
       <div className="flex items-center gap-3">
@@ -39,6 +54,9 @@ export default function ToolsPage() {
                 className="inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline">
                 ツールを開く <ExternalLink className="w-3 h-3" />
               </a>
+            )}
+            {tool.unavailableNote && !loading && (
+              <p className="text-sm text-gray-500">{tool.unavailableNote}</p>
             )}
             {tool.applyInfo && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">

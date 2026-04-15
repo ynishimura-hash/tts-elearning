@@ -93,6 +93,7 @@ export interface FAQ {
   answer: string
   link_text: string | null
   link_url: string | null
+  video_url: string | null
   sort_order: number
   is_online: boolean
   created_at: string

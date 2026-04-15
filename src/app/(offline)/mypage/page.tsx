@@ -110,14 +110,6 @@ export default function MyPage() {
         </div>
       </div>
 
-      {/* カリキュラム */}
-      {user.curriculum && (
-        <div className="bg-white rounded-xl p-6 shadow-sm">
-          <h2 className="text-lg font-bold text-[#384a8f] mb-2">現在のカリキュラム</h2>
-          <p className="text-gray-800">{user.curriculum}</p>
-        </div>
-      )}
-
       {/* パスワード変更 */}
       <div className="bg-white rounded-xl p-6 shadow-sm">
         <h2 className="text-lg font-bold text-[#384a8f] mb-4 flex items-center gap-2">

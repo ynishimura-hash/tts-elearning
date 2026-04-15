@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Edit, Trash2, Save, X, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react'
+import { Plus, Edit, Trash2, Save, X, ChevronUp, ChevronDown, ExternalLink, PlayCircle } from 'lucide-react'
 import type { FAQ } from '@/types/database'
 
 export default function AdminQAPage() {
@@ -10,7 +10,7 @@ export default function AdminQAPage() {
   const [filter, setFilter] = useState<'all' | 'online' | 'offline'>('all')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
-  const [form, setForm] = useState({ question: '', answer: '', link_text: '', link_url: '', is_online: false })
+  const [form, setForm] = useState({ question: '', answer: '', link_text: '', link_url: '', video_url: '', is_online: false })
 
   useEffect(() => { fetchData() }, [])
 
@@ -22,7 +22,7 @@ export default function AdminQAPage() {
 
   function startNew() {
     setEditingId(null)
-    setForm({ question: '', answer: '', link_text: '', link_url: '', is_online: false })
+    setForm({ question: '', answer: '', link_text: '', link_url: '', video_url: '', is_online: false })
     setShowNew(true)
   }
 
@@ -33,6 +33,7 @@ export default function AdminQAPage() {
       answer: faq.answer,
       link_text: faq.link_text || '',
       link_url: faq.link_url || '',
+      video_url: faq.video_url || '',
       is_online: faq.is_online,
     })
     setShowNew(true)
@@ -46,6 +47,7 @@ export default function AdminQAPage() {
       answer: form.answer,
       link_text: form.link_text || null,
       link_url: form.link_url || null,
+      video_url: form.video_url || null,
       is_online: form.is_online,
     }
 
@@ -60,7 +62,7 @@ export default function AdminQAPage() {
 
     setShowNew(false)
     setEditingId(null)
-    setForm({ question: '', answer: '', link_text: '', link_url: '', is_online: false })
+    setForm({ question: '', answer: '', link_text: '', link_url: '', video_url: '', is_online: false })
     fetchData()
   }
 
@@ -153,6 +155,13 @@ export default function AdminQAPage() {
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
               </div>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">解説動画URL（YouTube）</label>
+              <input type="url" value={form.video_url} onChange={(e) => setForm({ ...form, video_url: e.target.value })}
+                placeholder="https://youtu.be/... または https://www.youtube.com/watch?v=..."
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
+              <p className="text-xs text-gray-500 mt-1">設定すると、ユーザー側Q&Aで「解説動画を見る」ボタンが表示され、モーダルで再生されます。</p>
+            </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="faq_is_online" checked={form.is_online}
                 onChange={(e) => setForm({ ...form, is_online: e.target.checked })}
@@ -195,12 +204,19 @@ export default function AdminQAPage() {
                     <div className="min-w-0">
                       <p className="font-medium text-gray-800">{faq.question}</p>
                       <p className="text-sm text-gray-500 mt-1 whitespace-pre-wrap">{faq.answer}</p>
-                      {faq.link_url && (
-                        <a href={faq.link_url} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline mt-1">
-                          <ExternalLink className="w-3 h-3" /> {faq.link_text || 'リンク'}
-                        </a>
-                      )}
+                      <div className="flex flex-wrap gap-3 mt-1">
+                        {faq.link_url && (
+                          <a href={faq.link_url} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline">
+                            <ExternalLink className="w-3 h-3" /> {faq.link_text || 'リンク'}
+                          </a>
+                        )}
+                        {faq.video_url && (
+                          <span className="inline-flex items-center gap-1 text-sm text-red-600">
+                            <PlayCircle className="w-3.5 h-3.5" /> 解説動画あり
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0 ml-2">
@@ -244,12 +260,19 @@ export default function AdminQAPage() {
                     <div className="min-w-0">
                       <p className="font-medium text-gray-800">{faq.question}</p>
                       <p className="text-sm text-gray-500 mt-1 whitespace-pre-wrap">{faq.answer}</p>
-                      {faq.link_url && (
-                        <a href={faq.link_url} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline mt-1">
-                          <ExternalLink className="w-3 h-3" /> {faq.link_text || 'リンク'}
-                        </a>
-                      )}
+                      <div className="flex flex-wrap gap-3 mt-1">
+                        {faq.link_url && (
+                          <a href={faq.link_url} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline">
+                            <ExternalLink className="w-3 h-3" /> {faq.link_text || 'リンク'}
+                          </a>
+                        )}
+                        {faq.video_url && (
+                          <span className="inline-flex items-center gap-1 text-sm text-red-600">
+                            <PlayCircle className="w-3.5 h-3.5" /> 解説動画あり
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0 ml-2">
