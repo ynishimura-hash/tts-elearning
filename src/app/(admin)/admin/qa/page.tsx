@@ -5,8 +5,17 @@ import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, Save, X, ChevronUp, ChevronDown, ExternalLink, PlayCircle } from 'lucide-react'
 import type { FAQ } from '@/types/database'
 
+interface ContentOption {
+  id: string
+  name: string
+  youtube_url: string | null
+  course_id: string
+  course_name?: string
+}
+
 export default function AdminQAPage() {
   const [faqs, setFaqs] = useState<FAQ[]>([])
+  const [contents, setContents] = useState<ContentOption[]>([])
   const [filter, setFilter] = useState<'all' | 'online' | 'offline'>('all')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
@@ -16,8 +25,20 @@ export default function AdminQAPage() {
 
   async function fetchData() {
     const supabase = createClient()
-    const { data } = await supabase.from('faqs').select('*').order('is_online').order('sort_order')
-    if (data) setFaqs(data)
+    const [{ data: faqData }, { data: contentData }] = await Promise.all([
+      supabase.from('faqs').select('*').order('is_online').order('sort_order'),
+      supabase.from('contents').select('id, name, youtube_url, course_id, course:courses(name)').not('youtube_url', 'is', null).order('sort_order'),
+    ])
+    if (faqData) setFaqs(faqData)
+    if (contentData) {
+      setContents(contentData.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        youtube_url: c.youtube_url,
+        course_id: c.course_id,
+        course_name: c.course?.name,
+      })))
+    }
   }
 
   function startNew() {
@@ -156,11 +177,37 @@ export default function AdminQAPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">解説動画URL（YouTube）</label>
-              <input type="url" value={form.video_url} onChange={(e) => setForm({ ...form, video_url: e.target.value })}
-                placeholder="https://youtu.be/... または https://www.youtube.com/watch?v=..."
-                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
-              <p className="text-xs text-gray-500 mt-1">設定すると、ユーザー側Q&Aで「解説動画を見る」ボタンが表示され、モーダルで再生されます。</p>
+              <label className="block text-sm font-medium text-gray-700 mb-1">解説動画</label>
+              <p className="text-xs text-gray-500 mb-2">既存コンテンツから選択するか、YouTube URLを直接貼り付けます。設定すると、ユーザー側Q&Aで「解説動画を見る」ボタンがモーダル表示されます。</p>
+              <div className="space-y-2">
+                <select
+                  value={contents.find(c => c.youtube_url === form.video_url)?.id || ''}
+                  onChange={(e) => {
+                    const selected = contents.find(c => c.id === e.target.value)
+                    setForm({ ...form, video_url: selected?.youtube_url || '' })
+                  }}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none bg-white text-sm"
+                >
+                  <option value="">— 既存コンテンツから選択 —</option>
+                  {contents.map(c => (
+                    <option key={c.id} value={c.id}>
+                      [{c.course_name || '不明'}] {c.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <div className="flex-1 border-t"></div>
+                  <span>または</span>
+                  <div className="flex-1 border-t"></div>
+                </div>
+                <input type="url" value={form.video_url} onChange={(e) => setForm({ ...form, video_url: e.target.value })}
+                  placeholder="https://youtu.be/... または https://www.youtube.com/watch?v=..."
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
+                {form.video_url && (
+                  <button type="button" onClick={() => setForm({ ...form, video_url: '' })}
+                    className="text-xs text-gray-500 hover:text-red-500">動画設定をクリア</button>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="faq_is_online" checked={form.is_online}
