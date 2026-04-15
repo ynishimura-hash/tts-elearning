@@ -29,6 +29,7 @@ export default function AdminConsultationsPage() {
   const [items, setItems] = useState<Consultation[]>([])
   const [filter, setFilter] = useState<'all' | 'pending' | 'scheduled' | 'completed'>('all')
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({})
+  const [scheduleInput, setScheduleInput] = useState<Record<string, { date: string; time: string }>>({})
 
   useEffect(() => { fetchData() }, [])
 
@@ -41,8 +42,9 @@ export default function AdminConsultationsPage() {
     if (data) setItems(data as Consultation[])
   }
 
-  // 希望日時の中から1つ選んで確定
+  // 管理者が指定日時を入力して確定
   async function scheduleDate(id: string, date: string) {
+    if (!date.trim()) return
     if (!confirm(`この日時で確定しますか？\n${date}`)) return
     const supabase = createClient()
     await supabase.from('consultations').update({
@@ -176,18 +178,53 @@ export default function AdminConsultationsPage() {
                   </div>
                 )}
 
-                {/* 未対応の場合 → 希望日時から選んで確定 */}
-                {c.status === 'pending' && (
+                {/* 希望日時（参考表示） */}
+                {c.preferred_dates.length > 0 && (
                   <div className="mb-4">
-                    <p className="text-sm font-medium text-gray-700 mb-2">希望日時から選んで確定:</p>
-                    <div className="flex flex-wrap gap-2">
+                    <p className="text-xs font-medium text-gray-500 mb-2">ユーザーの希望日時（参考）</p>
+                    <ul className="space-y-1">
                       {c.preferred_dates.map((d, i) => (
-                        <button key={i} onClick={() => scheduleDate(c.id, d)}
-                          className="flex items-center gap-2 px-4 py-2 bg-white border-2 border-blue-300 rounded-lg text-sm font-medium text-blue-700 hover:bg-blue-50 hover:border-blue-500 transition-colors">
-                          <CalendarCheck className="w-4 h-4" />
-                          第{i + 1}希望: {d}
-                        </button>
+                        <li key={i} className="text-sm text-gray-700 bg-gray-50 rounded px-3 py-1.5">
+                          <span className="text-gray-400 mr-2">第{i + 1}希望:</span>{d}
+                        </li>
                       ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* 未対応の場合 → 管理者が指定日時を入力して確定 */}
+                {c.status === 'pending' && (
+                  <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm font-medium text-blue-900 mb-2 flex items-center gap-1">
+                      <CalendarCheck className="w-4 h-4" /> 日時を指定して確定
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input type="date"
+                        value={scheduleInput[c.id]?.date || ''}
+                        onChange={(e) => setScheduleInput(prev => ({
+                          ...prev,
+                          [c.id]: { ...(prev[c.id] || { date: '', time: '' }), date: e.target.value }
+                        }))}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none text-sm" />
+                      <input type="time" step={900}
+                        value={scheduleInput[c.id]?.time || ''}
+                        onChange={(e) => setScheduleInput(prev => ({
+                          ...prev,
+                          [c.id]: { ...(prev[c.id] || { date: '', time: '' }), time: e.target.value }
+                        }))}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none text-sm" />
+                      <button
+                        onClick={() => {
+                          const input = scheduleInput[c.id]
+                          if (!input?.date || !input?.time) {
+                            alert('日付と時刻を両方入力してください')
+                            return
+                          }
+                          scheduleDate(c.id, `${input.date} ${input.time}`)
+                        }}
+                        className="flex items-center justify-center gap-1 px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75] transition-colors">
+                        <Send className="w-3.5 h-3.5" /> この日時で確定
+                      </button>
                     </div>
                   </div>
                 )}
