@@ -88,6 +88,9 @@ TTS（トレード塾）のe-ラーニングシステム。
 API:
   ├── POST /api/send-email ← メール送信（Resend）
   ├── POST /api/reminders ← 勉強会リマインド・催促
+  ├── POST /api/admin/broadcast ← 一斉メール配信（管理者）
+  ├── GET  /api/admin/broadcast ← 配信履歴取得
+  ├── POST /api/admin/migrate/temp-passwords ← 仮パスワード一括発行
   └── GET  /api/auth/callback ← Supabase OAuth コールバック
 ```
 
@@ -132,13 +135,36 @@ API:
 - **管理者投稿**: 記事の作成・編集・公開/下書き切替・削除
 - **トレードルール紐付け**: 記事に関連ルール名を付与
 
-### 6. その他
+### 6. シミュレーション（4/13 追加）
+
+- **入力**: 初期資金（万円単位、10万円ステップ）／月利（10/20/30/40% プリセット、1% ステップ）／目標金額
+- **出力**: 複利推移グラフ、目標達成予測月数（デフォルト 2 年）
+
+### 7. メール一斉配信（4/18 追加）
+
+- **管理画面**: `/admin/broadcasts` から件名・本文・宛先を指定して一斉送信
+- **動的変数**: `{{full_name}}` `{{email}}` `{{customer_id}}` `{{temp_password}}` `{{login_url}}` を受講者ごとに置換
+- **宛先選択**: CSV 取込／TTS ユーザー絞り込み（対面・オンライン・無料・管理者）／手動追加
+- **テスト送信**: 本番送信前に自分宛に [テスト] 付きで 1 通送信
+- **配信履歴**: `email_broadcasts` テーブルに保存、画面から閲覧可能
+- **配信停止**: フッターのリンクから受信者本人がオプトアウト、`email_unsubscribes` テーブルで管理
+
+### 8. Adalo 移行支援（4/18 追加）
+
+- 全ユーザーに対して 12 桁ランダム仮パスワードを一括発行
+- Supabase Auth に存在しないユーザーは新規作成、存在すればパスワード更新
+- 「ログイン案内メール」テンプレートでそのまま一斉配信
+- 仮パスワード一覧は CSV ダウンロード可能
+
+### 9. その他
 
 - **コミュニティ**: 加入/未加入の状態表示
 - **紹介キャンペーン**: 紹介コード（顧客ID）の表示・コピー
 - **検証ツール**: ピークボトムツール申請案内、TradingView、売買記録テンプレート
 - **みんなの進捗**: 全受講生の学習進捗ランキング
 - **有効期限管理**: 退会日を過ぎたアカウントは専用画面へリダイレクト
+- **個別相談**: 内部フォーム化、決済モーダル、管理者直接日時入力（4/15 追加）
+- **Q&A 解説動画**: 既存コンテンツから動画を選択して紐付け、モーダルで再生（4/15 追加）
 
 ---
 
@@ -161,6 +187,8 @@ API:
 | `final_tests` | 最終テスト問題 | course_id, question, options, correct_answer |
 | `final_test_results` | 最終テスト結果 | user_id, course_id, passed, score |
 | `messages` | メッセージ通知 | title, body, target_role |
+| `email_broadcasts` | 配信履歴 | subject, body, sender_email, total/sent/failed/skipped |
+| `email_unsubscribes` | 配信停止リスト | email, reason, created_at |
 
 ### RLSポリシー
 

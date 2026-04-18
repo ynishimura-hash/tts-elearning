@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
   Home, BookOpen, Wrench, HelpCircle, MessageSquare, User, TrendingUp,
-  Menu, X, LogOut, Users, CalendarDays, Bell, FileText, UserPlus
+  Menu, X, LogOut, Users, CalendarDays, Bell, FileText, UserPlus, Mail
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -46,6 +46,7 @@ const navItems: Record<NavMode, { href: string; label: string; icon: React.Eleme
     { href: '/admin/blog', label: 'ブログ管理', icon: FileText },
     { href: '/admin/qa', label: 'Q&A管理', icon: HelpCircle },
     { href: '/admin/applications', label: '申込管理', icon: UserPlus },
+    { href: '/admin/broadcasts', label: 'メール配信', icon: Mail },
   ],
   free: [
     { href: '/free/home', label: 'ホーム', icon: Home },
