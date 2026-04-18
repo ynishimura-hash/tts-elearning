@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin, Edit, Save, X, Send, Bell, Copy } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatDateWithWeekday } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance, User } from '@/types/database'
 
 export default function AdminStudySessionsPage() {
@@ -299,7 +299,7 @@ export default function AdminStudySessionsPage() {
                       {isPast && <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">終了</span>}
                     </div>
                     <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
-                      <span className="flex items-center gap-1"><CalendarDays className="w-4 h-4" />{formatDate(session.session_date)}</span>
+                      <span className="flex items-center gap-1"><CalendarDays className="w-4 h-4" />{formatDateWithWeekday(session.session_date)}</span>
                       {session.session_time && <span className="text-gray-400">{session.session_time}</span>}
                       {session.location && <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{session.location}</span>}
                       {session.zoom_url && <span className="flex items-center gap-1"><Video className="w-4 h-4" />Zoom設定済み</span>}

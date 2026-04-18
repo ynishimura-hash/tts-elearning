@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { ProgressBar } from '@/components/ProgressBar'
 import { BookOpen, CalendarDays, TrendingUp, Bell, ChevronRight, Wifi } from 'lucide-react'
-import { formatDate, daysSince } from '@/lib/utils'
+import { formatDate, formatDateWithWeekday, daysSince } from '@/lib/utils'
 import type { Course, StudySession, Announcement } from '@/types/database'
 
 export default function OnlineHomePage() {
@@ -115,7 +115,7 @@ export default function OnlineHomePage() {
             <div>
               <p className="text-sm text-gray-500">次のオンライン勉強会</p>
               <p className="text-sm font-bold">
-                {nextSession ? formatDate(nextSession.session_date) : '未定'}
+                {nextSession ? formatDateWithWeekday(nextSession.session_date) : '未定'}
               </p>
             </div>
           </div>

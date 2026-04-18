@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { CalendarDays, MapPin, CheckCircle2, XCircle, Clock, HelpCircle } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatDateWithWeekday } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance } from '@/types/database'
 
 export default function StudySessionsPage() {
@@ -119,7 +119,7 @@ export default function StudySessionsPage() {
                       <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                         <span className="flex items-center gap-1">
                           <CalendarDays className="w-4 h-4" />
-                          {formatDate(session.session_date)}
+                          {formatDateWithWeekday(session.session_date)}
                         </span>
                         {session.session_time && (
                           <span className="flex items-center gap-1">
@@ -206,7 +206,7 @@ export default function StudySessionsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-medium text-gray-600">{session.title}</h3>
-                    <p className="text-sm text-gray-400">{formatDate(session.session_date)}</p>
+                    <p className="text-sm text-gray-400">{formatDateWithWeekday(session.session_date)}</p>
                   </div>
                   {attendance[session.id] && (
                     <span className={`text-sm px-2 py-1 rounded ${

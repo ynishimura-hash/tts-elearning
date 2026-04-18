@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { CalendarDays, Video, CheckCircle2, XCircle, Clock, HelpCircle, ExternalLink } from 'lucide-react'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatDateWithWeekday } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance } from '@/types/database'
 
 export default function OnlineStudySessionsPage() {
@@ -82,7 +82,7 @@ export default function OnlineStudySessionsPage() {
                   <div className="mb-4">
                     <h3 className="font-bold text-gray-800 text-lg">{session.title}</h3>
                     <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                      <span className="flex items-center gap-1"><CalendarDays className="w-4 h-4" />{formatDate(session.session_date)}</span>
+                      <span className="flex items-center gap-1"><CalendarDays className="w-4 h-4" />{formatDateWithWeekday(session.session_date)}</span>
                       {session.session_time && <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{session.session_time}</span>}
                     </div>
                   </div>
@@ -148,7 +148,7 @@ export default function OnlineStudySessionsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-medium text-gray-600">{session.title}</h3>
-                    <p className="text-sm text-gray-400">{formatDate(session.session_date)}</p>
+                    <p className="text-sm text-gray-400">{formatDateWithWeekday(session.session_date)}</p>
                   </div>
                   {attendance[session.id] && (
                     <span className={`text-sm px-2 py-1 rounded ${

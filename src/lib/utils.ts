@@ -11,6 +11,16 @@ export function formatDate(dateStr: string | null) {
   })
 }
 
+export function formatDateWithWeekday(dateStr: string | null) {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleDateString('ja-JP', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  })
+}
+
 export function formatDateTime(dateStr: string | null) {
   if (!dateStr) return '-'
   return new Date(dateStr).toLocaleString('ja-JP', {
