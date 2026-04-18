@@ -102,6 +102,14 @@ export default function SimulationPage() {
     return v.toLocaleString()
   }
 
+  // 1億円以上のときに「1億2,345万円」形式で返す
+  const formatOku = (v: number): string => {
+    if (v < 100_000_000) return `${Math.round(v / 10000).toLocaleString()}万円`
+    const oku = Math.floor(v / 100_000_000)
+    const restMan = Math.round((v % 100_000_000) / 10000)
+    return restMan === 0 ? `${oku}億円` : `${oku}億${restMan.toLocaleString()}万円`
+  }
+
   return (
     <div className="space-y-6 pt-12 lg:pt-0 max-w-4xl mx-auto">
       <div className="flex items-center gap-3">
@@ -117,8 +125,11 @@ export default function SimulationPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">初期資金（万円）</label>
             <div className="relative">
-              <input type="number" step="10" min="0" value={Math.round(initial / 10000)}
-                onChange={(e) => setInitial(Number(e.target.value) * 10000)}
+              <input type="number" step="10" min="0"
+                value={initial > 0 ? Math.round(initial / 10000) : ''}
+                onChange={(e) => setInitial(e.target.value === '' ? 0 : Number(e.target.value) * 10000)}
+                onFocus={(e) => e.target.select()}
+                placeholder="0"
                 className="w-full pl-4 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none text-lg font-bold" />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">万円</span>
             </div>
@@ -133,7 +144,11 @@ export default function SimulationPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">月利 (%)</label>
-            <input type="number" step="1" value={rate} onChange={(e) => setRate(Number(e.target.value))}
+            <input type="number" step="1" min="0"
+              value={rate || ''}
+              onChange={(e) => setRate(e.target.value === '' ? 0 : Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
+              placeholder="0"
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none text-lg font-bold" />
             <div className="flex gap-1 mt-2">
               {[10, 20, 30, 40].map(v => (
@@ -146,7 +161,11 @@ export default function SimulationPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">運用期間 (年)</label>
-            <input type="number" min={1} max={30} value={years} onChange={(e) => setYears(Number(e.target.value))}
+            <input type="number" min={1} max={30}
+              value={years || ''}
+              onChange={(e) => setYears(e.target.value === '' ? 0 : Number(e.target.value))}
+              onFocus={(e) => e.target.select()}
+              placeholder="2"
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none text-lg font-bold" />
             <div className="flex gap-1 mt-2">
               {[1, 3, 5, 10].map(v => (
@@ -166,11 +185,17 @@ export default function SimulationPage() {
             <div className="relative">
               <input type="number" step={STEP_MAN} min={0}
                 value={goalAmount ? Math.round(goalAmount / MAN) : ''}
-                onChange={(e) => setGoalAmount(Number(e.target.value) * MAN)}
+                onChange={(e) => setGoalAmount(e.target.value === '' ? 0 : Number(e.target.value) * MAN)}
+                onFocus={(e) => e.target.select()}
                 placeholder="例: 1000"
                 className="w-40 pl-4 pr-12 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#e39f3c] outline-none font-bold text-right" />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">万円</span>
             </div>
+            {goalAmount >= 100_000_000 && (
+              <span className="text-sm text-[#e39f3c] font-semibold whitespace-nowrap">
+                ＝ {formatOku(goalAmount)}
+              </span>
+            )}
             <div className="flex gap-1 flex-wrap">
               {[500, 1000, 5000, 10000].map(v => (
                 <button key={v} onClick={() => setGoalAmount(v * MAN)}
