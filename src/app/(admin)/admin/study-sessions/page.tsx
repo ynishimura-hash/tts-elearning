@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin, Edit, Save, X, Send, Bell } from 'lucide-react'
+import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin, Edit, Save, X, Send, Bell, Copy } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance, User } from '@/types/database'
 
@@ -56,7 +56,23 @@ export default function AdminStudySessionsPage() {
     setEditingId(session.id)
     setForm({
       title: session.title,
-      session_date: session.session_date ? new Date(session.session_date).toISOString().slice(0, 16) : '',
+      session_date: session.session_date ? new Date(session.session_date).toISOString().slice(0, 10) : '',
+      session_time: session.session_time || '',
+      location: session.location || '',
+      zoom_url: session.zoom_url || '',
+      is_online: session.is_online,
+      description: session.description || '',
+      max_participants: session.max_participants ? String(session.max_participants) : '',
+    })
+    setShowForm(true)
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100)
+  }
+
+  function startDuplicate(session: StudySession) {
+    setEditingId(null)  // 新規作成扱い
+    setForm({
+      title: session.title + '（コピー）',
+      session_date: '',  // 日付は再入力
       session_time: session.session_time || '',
       location: session.location || '',
       zoom_url: session.zoom_url || '',
@@ -212,8 +228,8 @@ export default function AdminStudySessionsPage() {
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" placeholder="例: 第12回勉強会" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">日時 *</label>
-                <input type="datetime-local" required value={form.session_date} onChange={(e) => setForm({ ...form, session_date: e.target.value })}
+                <label className="block text-sm font-medium text-gray-700 mb-1">開催日 *</label>
+                <input type="date" required value={form.session_date} onChange={(e) => setForm({ ...form, session_date: e.target.value })}
                   className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
               </div>
               <div>
@@ -315,6 +331,10 @@ export default function AdminStudySessionsPage() {
                     <button onClick={() => startEdit(session)}
                       className="p-2 text-[#384a8f] hover:bg-blue-50 rounded-lg transition-colors" title="編集">
                       <Edit className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => startDuplicate(session)}
+                      className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="複製">
+                      <Copy className="w-4 h-4" />
                     </button>
                     <button onClick={() => handleDelete(session.id)}
                       className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="削除">
