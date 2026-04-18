@@ -78,16 +78,11 @@ export function generateUnsubscribeToken(email: string): string {
   return Buffer.from(email).toString('base64url')
 }
 
-export function getEmailFooterHtml(recipientEmail: string): string {
-  const token = generateUnsubscribeToken(recipientEmail)
-  const unsubscribeUrl = `${APP_BASE_URL}/unsubscribe?token=${encodeURIComponent(token)}`
+export function getEmailFooterHtml(_recipientEmail: string): string {
   return `
     <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e2e8f0;font-family:'Helvetica Neue',Arial,sans-serif;font-size:12px;color:#94a3b8;line-height:1.6;">
       <p style="margin:0 0 4px 0;font-weight:600;color:#64748b;">TTS e-ラーニング事務局</p>
-      <p style="margin:0;">
-        このメールは TTS e-ラーニングから配信しています。
-        <a href="${unsubscribeUrl}" style="color:#3b82f6;text-decoration:underline;">配信停止はこちら</a>
-      </p>
+      <p style="margin:0;">このメールは TTS e-ラーニングから配信しています。</p>
     </div>
   `
 }
@@ -221,18 +216,11 @@ export async function sendBroadcast(args: SendBroadcastArgs): Promise<BroadcastR
     const baseHtml = args.bodyHtml ?? textToHtml(args.bodyText)
     const personalHtml = renderTemplate(baseHtml, vars) + getEmailFooterHtml(recipient.email)
 
-    const token = generateUnsubscribeToken(recipient.email)
-    const unsubscribeUrl = `${systemVars.app_url}/unsubscribe?token=${encodeURIComponent(token)}`
-    const headers = {
-      'List-Unsubscribe': `<${unsubscribeUrl}>`,
-      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-    }
     const sendArgs = {
       from,
       to: recipient.email,
       subject: personalSubject,
       html: personalHtml,
-      headers,
     }
 
     let res: SendResult
