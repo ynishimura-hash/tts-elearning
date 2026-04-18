@@ -13,7 +13,7 @@ const CHART_COLORS = ['#384a8f', '#e39f3c', '#22c55e', '#8b5cf6', '#ef4444', '#0
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<'all' | 'offline' | 'online' | 'free' | 'admin' | 'test'>('all')
+  const [filter, setFilter] = useState<'all' | 'offline' | 'online' | 'free' | 'admin' | 'test' | 'on_leave' | 'withdrew'>('all')
   const [progressMap, setProgressMap] = useState<Record<string, { done: number; total: number }>>({})
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [editingUser, setEditingUser] = useState<User | null>(null)
@@ -22,6 +22,7 @@ export default function AdminUsersPage() {
     is_admin: false, joined_at: '', debut_date: '', account_issued_at: '',
     curriculum: '', community_member: false, myrule_permitted: false,
     is_test: false, drive_folder_url: '',
+    is_on_leave: false, withdrew_at: '',
   })
   const [saving, setSaving] = useState(false)
   const [userCourseProgress, setUserCourseProgress] = useState<{ name: string; done: number; total: number; courseId: string }[]>([])
@@ -129,6 +130,8 @@ export default function AdminUsersPage() {
       myrule_permitted: user.myrule_permitted,
       is_test: user.is_test,
       drive_folder_url: user.drive_folder_url || '',
+      is_on_leave: !!user.is_on_leave,
+      withdrew_at: user.withdrew_at ? user.withdrew_at.split('T')[0] : '',
     })
     setSelectedUser(null)
   }
@@ -152,6 +155,8 @@ export default function AdminUsersPage() {
       myrule_permitted: editForm.myrule_permitted,
       is_test: editForm.is_test,
       drive_folder_url: editForm.drive_folder_url || null,
+      is_on_leave: editForm.is_on_leave,
+      withdrew_at: editForm.withdrew_at || null,
     }).eq('id', editingUser.id)
 
     setSaving(false)
@@ -190,6 +195,8 @@ export default function AdminUsersPage() {
     if (filter === 'free' && !u.is_free_user) return false
     if (filter === 'admin' && !u.is_admin) return false
     if (filter === 'test' && !u.is_test) return false
+    if (filter === 'on_leave' && !u.is_on_leave) return false
+    if (filter === 'withdrew' && !(u.withdrew_at && new Date(u.withdrew_at) <= new Date())) return false
     if (search) {
       const s = search.toLowerCase()
       return u.full_name.toLowerCase().includes(s) || u.email.toLowerCase().includes(s) ||
@@ -213,14 +220,17 @@ export default function AdminUsersPage() {
             className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] focus:border-transparent outline-none" />
         </div>
         <div className="flex gap-2 flex-wrap">
-          {(['all', 'offline', 'online', 'free', 'admin', 'test'] as const).map((f) => (
+          {(['all', 'offline', 'online', 'free', 'admin', 'test', 'on_leave', 'withdrew'] as const).map((f) => (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 filter === f
-                  ? f === 'test' ? 'bg-yellow-500 text-white' : 'bg-[#384a8f] text-white'
+                  ? f === 'test' ? 'bg-yellow-500 text-white'
+                    : f === 'on_leave' ? 'bg-amber-500 text-white'
+                    : f === 'withdrew' ? 'bg-rose-500 text-white'
+                    : 'bg-[#384a8f] text-white'
                   : 'bg-white text-gray-600 hover:bg-gray-100'
               }`}>
-              {{ all: '全員', offline: '対面', online: 'オンライン', free: '無料', admin: '管理者', test: 'テスト' }[f]}
+              {{ all: '全員', offline: '対面', online: 'オンライン', free: '無料', admin: '管理者', test: 'テスト', on_leave: '休学中', withdrew: '期限切れ' }[f]}
             </button>
           ))}
         </div>
@@ -264,6 +274,12 @@ export default function AdminUsersPage() {
                         </span>
                         {user.is_test && (
                           <span className="text-xs px-2 py-0.5 rounded w-fit bg-yellow-100 text-yellow-700 border border-yellow-300">テスト</span>
+                        )}
+                        {user.is_on_leave && (
+                          <span className="text-xs px-2 py-0.5 rounded w-fit bg-amber-100 text-amber-700 border border-amber-300">休学中</span>
+                        )}
+                        {user.withdrew_at && new Date(user.withdrew_at) <= new Date() && (
+                          <span className="text-xs px-2 py-0.5 rounded w-fit bg-rose-100 text-rose-700 border border-rose-300">期限切れ</span>
                         )}
                       </div>
                     </td>
@@ -329,6 +345,8 @@ export default function AdminUsersPage() {
               <div><span className="text-gray-500">カリキュラム:</span> <span className="font-medium">{selectedUser.curriculum || '-'}</span></div>
               <div><span className="text-gray-500">コミュニティ:</span> <span className="font-medium">{selectedUser.community_member ? '加入' : '未加入'}</span></div>
               <div><span className="text-gray-500">マイルール許可:</span> <span className="font-medium">{selectedUser.myrule_permitted ? 'あり' : 'なし'}</span></div>
+              <div><span className="text-gray-500">休学:</span> <span className={`font-medium ${selectedUser.is_on_leave ? 'text-amber-700' : ''}`}>{selectedUser.is_on_leave ? '休学中' : '-'}</span></div>
+              <div><span className="text-gray-500">期限日:</span> <span className={`font-medium ${selectedUser.withdrew_at && new Date(selectedUser.withdrew_at) <= new Date() ? 'text-rose-700' : ''}`}>{selectedUser.withdrew_at ? formatDate(selectedUser.withdrew_at) : '-'}</span></div>
               <div className="col-span-2"><span className="text-gray-500">最終学習コンテンツ:</span> <span className="font-medium">{selectedUser.last_content || '-'}</span></div>
               {selectedUser.drive_folder_url && (
                 <div className="col-span-2"><span className="text-gray-500">Driveフォルダ:</span> <a href={selectedUser.drive_folder_url} target="_blank" rel="noopener noreferrer" className="text-[#384a8f] hover:underline font-medium ml-1">開く</a></div>
@@ -529,6 +547,7 @@ export default function AdminUsersPage() {
                   { key: 'community_member', label: 'コミュニティメンバー' },
                   { key: 'myrule_permitted', label: 'マイルール許可' },
                   { key: 'is_test', label: 'テストアカウント' },
+                  { key: 'is_on_leave', label: '休学中' },
                 ].map((opt) => (
                   <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700">
                     <input type="checkbox" checked={(editForm as Record<string, unknown>)[opt.key] as boolean}
@@ -537,6 +556,15 @@ export default function AdminUsersPage() {
                     {opt.label}
                   </label>
                 ))}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">退会日（設定すると退会扱い）</label>
+                <input type="date" value={editForm.withdrew_at} onChange={(e) => setEditForm({ ...editForm, withdrew_at: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-rose-500 outline-none" />
+                {editForm.withdrew_at && (
+                  <button type="button" onClick={() => setEditForm({ ...editForm, withdrew_at: '' })}
+                    className="mt-1 text-xs text-rose-600 hover:underline">退会日をクリア</button>
+                )}
               </div>
               <div className="flex gap-2 pt-2">
                 <button type="submit" disabled={saving}

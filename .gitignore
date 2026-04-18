@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 仮パスワード等の機密 CSV（コミット禁止）
+scripts/output/

@@ -11,6 +11,7 @@ export interface User {
   is_admin: boolean
   is_online: boolean
   is_free_user: boolean
+  is_on_leave: boolean
   joined_at: string | null
   withdrew_at: string | null
   account_issued_at: string | null

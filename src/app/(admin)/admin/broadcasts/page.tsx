@@ -18,7 +18,7 @@ type Recipient = {
   temp_password?: string | null
 }
 
-type ViewMode = 'compose' | 'history' | 'migrate'
+type ViewMode = 'compose' | 'history'
 
 type UserRow = {
   id: string
@@ -29,6 +29,8 @@ type UserRow = {
   is_online: boolean
   is_free_user: boolean
   is_test?: boolean
+  is_on_leave?: boolean
+  withdrew_at?: string | null
 }
 
 type BroadcastResult = {
@@ -177,19 +179,70 @@ export default function AdminBroadcastsPage() {
     if (!file) return
     const reader = new FileReader()
     reader.onload = (ev) => {
-      const text = ev.target?.result as string
+      const text = (ev.target?.result as string).replace(/^\ufeff/, '') // BOM 除去
       const lines = text.split(/\r?\n/).filter((l) => l.trim())
+      if (lines.length === 0) return
+
+      // ヘッダー解析: email/full_name/temp_password/customer_id 列を自動検出
+      const splitCsv = (line: string) => {
+        const out: string[] = []
+        let cur = ''
+        let inQuote = false
+        for (let i = 0; i < line.length; i++) {
+          const c = line[i]
+          if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; continue }
+          if (c === '"') { inQuote = !inQuote; continue }
+          if (c === ',' && !inQuote) { out.push(cur); cur = ''; continue }
+          cur += c
+        }
+        out.push(cur)
+        return out.map((s) => s.trim())
+      }
+
+      const header = splitCsv(lines[0]).map((h) => h.toLowerCase())
+      const hasHeader =
+        header.includes('email') ||
+        header.includes('full_name') ||
+        header.includes('temp_password') ||
+        header.includes('name')
+
+      const idxEmail = header.indexOf('email')
+      const idxName = header.includes('full_name')
+        ? header.indexOf('full_name')
+        : header.indexOf('name')
+      const idxPw = header.indexOf('temp_password')
+      const idxCust = header.indexOf('customer_id')
+
       const next: Recipient[] = []
-      for (const line of lines) {
-        const cols = line.split(',').map((s) => s.trim().replace(/^"|"$/g, ''))
-        const emailCol = cols.findIndex((c) => c.includes('@'))
-        if (emailCol < 0) continue
-        const email = cols[emailCol]
-        const name = cols.filter((_, i) => i !== emailCol).join(' ').trim()
+      const dataLines = hasHeader ? lines.slice(1) : lines
+      for (const line of dataLines) {
+        const cols = splitCsv(line)
+        let email = ''
+        let name: string | null = null
+        let pw: string | null = null
+        let cust: string | null = null
+        if (hasHeader && idxEmail >= 0) {
+          email = cols[idxEmail] || ''
+          name = idxName >= 0 ? (cols[idxName] || null) : null
+          pw = idxPw >= 0 ? (cols[idxPw] || null) : null
+          cust = idxCust >= 0 ? (cols[idxCust] || null) : null
+        } else {
+          // ヘッダー無しは email を含む列を自動検出
+          const emailCol = cols.findIndex((c) => c.includes('@'))
+          if (emailCol < 0) continue
+          email = cols[emailCol]
+          name = cols.filter((_, i) => i !== emailCol).join(' ').trim() || null
+        }
         if (email && !next.find((r) => r.email === email)) {
-          next.push({ email, full_name: name || null })
+          next.push({
+            email,
+            full_name: name,
+            temp_password: pw,
+            customer_id: cust,
+          })
         }
       }
+
       setRecipients((prev) => {
         const existing = new Set(prev.map((r) => r.email))
         return [...prev, ...next.filter((r) => !existing.has(r.email))]
@@ -211,7 +264,7 @@ export default function AdminBroadcastsPage() {
       const supabase = createClient()
       const { data } = await supabase
         .from('users')
-        .select('id, email, full_name, customer_id, is_admin, is_online, is_free_user')
+        .select('id, email, full_name, customer_id, is_admin, is_online, is_free_user, is_test, is_on_leave, withdrew_at')
         .order('full_name', { ascending: true })
       setUsers((data || []) as UserRow[])
       setUsersLoading(false)
@@ -222,6 +275,10 @@ export default function AdminBroadcastsPage() {
     return users.filter((u) => {
       if (!u.email) return false
       if (recipients.find((r) => r.email === u.email)) return false
+      // テストアカウント・退会済みは配信対象外として常に非表示
+      // （withdrew_at は退会予定日。今日以前のものは退会済み扱い）
+      if (u.is_test) return false
+      if (u.withdrew_at && new Date(u.withdrew_at) <= new Date()) return false
       if (userFilter === 'offline' && (u.is_online || u.is_free_user || u.is_admin)) return false
       if (userFilter === 'online' && (!u.is_online || u.is_free_user || u.is_admin)) return false
       if (userFilter === 'free' && !u.is_free_user) return false
@@ -436,9 +493,6 @@ export default function AdminBroadcastsPage() {
           <TabBtn active={view === 'compose'} onClick={() => setView('compose')}>
             <Send className="w-4 h-4" /> 配信
           </TabBtn>
-          <TabBtn active={view === 'migrate'} onClick={() => setView('migrate')}>
-            <KeyRound className="w-4 h-4" /> Adalo 移行
-          </TabBtn>
           <TabBtn
             active={view === 'history'}
             onClick={() => {
@@ -478,19 +532,6 @@ export default function AdminBroadcastsPage() {
           onOpenUserModal={openUserModal}
           onSend={handleSend}
           onOpenTest={() => setShowTestModal(true)}
-        />
-      )}
-
-      {view === 'migrate' && (
-        <MigrateView
-          scope={migrateScope}
-          setScope={setMigrateScope}
-          migrating={migrating}
-          issued={issued}
-          error={migrateError}
-          onIssue={handleIssuePasswords}
-          onDownloadCsv={downloadIssuedCsv}
-          onLoadAsRecipients={loadIssuedAsRecipients}
         />
       )}
 
@@ -608,7 +649,35 @@ export default function AdminBroadcastsPage() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 sticky top-0">
                   <tr>
-                    <th className="w-10 px-3 py-2"></th>
+                    <th className="w-10 px-3 py-2">
+                      <input
+                        type="checkbox"
+                        aria-label="表示中を全選択/全解除"
+                        checked={
+                          filteredUsers.length > 0 &&
+                          filteredUsers.every((u) => selectedUserIds.has(u.id))
+                        }
+                        ref={(el) => {
+                          if (!el) return
+                          const some = filteredUsers.some((u) => selectedUserIds.has(u.id))
+                          const all = filteredUsers.every((u) => selectedUserIds.has(u.id))
+                          el.indeterminate = some && !all
+                        }}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedUserIds(new Set([
+                              ...selectedUserIds,
+                              ...filteredUsers.map((u) => u.id),
+                            ]))
+                          } else {
+                            const next = new Set(selectedUserIds)
+                            for (const u of filteredUsers) next.delete(u.id)
+                            setSelectedUserIds(next)
+                          }
+                        }}
+                        className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      />
+                    </th>
                     <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">名前</th>
                     <th className="text-left px-3 py-2 text-xs font-medium text-slate-600 hidden md:table-cell">メール</th>
                     <th className="text-left px-3 py-2 text-xs font-medium text-slate-600">区分</th>
@@ -633,10 +702,11 @@ export default function AdminBroadcastsPage() {
                       </td>
                       <td className="px-3 py-2.5 font-medium text-slate-800">{u.full_name}</td>
                       <td className="px-3 py-2.5 text-slate-500 hidden md:table-cell">{u.email}</td>
-                      <td className="px-3 py-2.5 text-xs">
+                      <td className="px-3 py-2.5 text-xs space-x-1">
                         {u.is_admin && <Tag color="violet">管理者</Tag>}
                         {u.is_free_user && <Tag color="amber">無料</Tag>}
                         {!u.is_admin && !u.is_free_user && (u.is_online ? <Tag color="cyan">オンライン</Tag> : <Tag color="blue">対面</Tag>)}
+                        {u.is_on_leave && <Tag color="amber">休学</Tag>}
                       </td>
                     </tr>
                   ))}
