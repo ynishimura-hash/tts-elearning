@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   Mail, Send, Upload, UserPlus, Plus, Trash2, Eye, TestTube, Clock,
   CheckCircle2, History, Sparkles, X, FileDown, AlertCircle, KeyRound,
-  Search,
+  Search, ChevronUp, ChevronDown,
 } from 'lucide-react'
 
 // ============================================================
@@ -1159,12 +1159,16 @@ function MigrateView(p: MigrateViewProps) {
 interface HistoryRow {
   id: string
   subject: string
+  body_text: string | null
+  body_html: string | null
   sender_email: string
   sender_name: string | null
   total_recipients: number
   sent_count: number
   failed_count: number
   skipped_count: number
+  errors: { email: string; error: string }[] | null
+  variables_used: string[] | null
   created_at: string
 }
 
@@ -1177,53 +1181,143 @@ function HistoryView({
   history: HistoryRow[]
   onBack: () => void
 }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  if (loading) {
+    return <div className="text-center py-12 text-slate-400">読み込み中...</div>
+  }
+  if (history.length === 0) {
+    return (
+      <div className="text-center py-12 text-slate-400">
+        配信履歴はありません
+        <div className="mt-3">
+          <button
+            onClick={onBack}
+            className="text-sm text-[#384a8f] hover:underline"
+          >
+            配信画面に戻る
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-3">
-      {loading ? (
-        <div className="text-center py-12 text-slate-400">読み込み中...</div>
-      ) : history.length === 0 ? (
-        <div className="text-center py-12 text-slate-400">
-          配信履歴はありません
-          <div className="mt-3">
-            <button
-              onClick={onBack}
-              className="text-sm text-[#384a8f] hover:underline"
-            >
-              配信画面に戻る
-            </button>
-          </div>
-        </div>
-      ) : (
-        history.map((item) => (
+      {history.map((item) => {
+        const isOpen = expandedId === item.id
+        return (
           <div
             key={item.id}
-            className="bg-white rounded-xl p-4 md:p-5 shadow-sm border border-slate-100"
+            className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden"
           >
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <h3 className="font-semibold text-slate-800 truncate">{item.subject}</h3>
-                <p className="text-sm text-slate-500 mt-1">
-                  送信者: {item.sender_email} ・{' '}
-                  {new Date(item.created_at).toLocaleString('ja-JP')}
-                </p>
+            {/* サマリー行（クリックで展開） */}
+            <button
+              type="button"
+              onClick={() => setExpandedId(isOpen ? null : item.id)}
+              className="w-full text-left p-4 md:p-5 hover:bg-slate-50 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold text-slate-800 truncate flex items-center gap-2">
+                    {isOpen ? (
+                      <ChevronUp className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                    )}
+                    {item.subject}
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-1 ml-6">
+                    送信者: {item.sender_email} ・{' '}
+                    {new Date(item.created_at).toLocaleString('ja-JP')}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 text-sm">
+                  <span className="flex items-center gap-1 text-emerald-600">
+                    <CheckCircle2 className="w-4 h-4" />
+                    {item.sent_count}
+                  </span>
+                  {item.failed_count > 0 && (
+                    <span className="text-rose-600">失敗 {item.failed_count}</span>
+                  )}
+                  {item.skipped_count > 0 && (
+                    <span className="text-amber-600">スキップ {item.skipped_count}</span>
+                  )}
+                  <span className="text-slate-400">/ {item.total_recipients}名</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0 text-sm">
-                <span className="flex items-center gap-1 text-emerald-600">
-                  <CheckCircle2 className="w-4 h-4" />
-                  {item.sent_count}
-                </span>
-                {item.failed_count > 0 && (
-                  <span className="text-rose-600">失敗 {item.failed_count}</span>
+            </button>
+
+            {/* 詳細セクション */}
+            {isOpen && (
+              <div className="border-t border-slate-100 bg-slate-50/50 p-4 md:p-5 space-y-4">
+                {/* メタ情報 */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <p className="text-slate-400 mb-0.5">配信日時</p>
+                    <p className="text-slate-700 font-medium">{new Date(item.created_at).toLocaleString('ja-JP')}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 mb-0.5">送信者</p>
+                    <p className="text-slate-700 font-medium">{item.sender_name || '-'}</p>
+                    <p className="text-slate-500">{item.sender_email}</p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 mb-0.5">配信件数</p>
+                    <p className="text-slate-700 font-medium">
+                      <span className="text-emerald-600">成功 {item.sent_count}</span>
+                      {item.failed_count > 0 && <span className="text-rose-600 ml-2">失敗 {item.failed_count}</span>}
+                      {item.skipped_count > 0 && <span className="text-amber-600 ml-2">スキップ {item.skipped_count}</span>}
+                      <span className="text-slate-400"> / 合計 {item.total_recipients}名</span>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-400 mb-0.5">使用変数</p>
+                    <p className="text-slate-700 font-mono text-[11px]">
+                      {item.variables_used?.length
+                        ? item.variables_used.map((v) => `{{${v}}}`).join(' ')
+                        : '-'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 件名 */}
+                <div>
+                  <p className="text-xs text-slate-400 mb-1">件名</p>
+                  <p className="text-sm font-medium text-slate-800 bg-white rounded-lg px-3 py-2 border border-slate-200">
+                    {item.subject}
+                  </p>
+                </div>
+
+                {/* 本文 */}
+                <div>
+                  <p className="text-xs text-slate-400 mb-1">本文</p>
+                  <div className="bg-white rounded-lg px-4 py-3 border border-slate-200 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap font-sans max-h-[400px] overflow-y-auto">
+                    {item.body_text || (item.body_html
+                      ? item.body_html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                      : '(本文なし)')}
+                  </div>
+                </div>
+
+                {/* エラー一覧 */}
+                {item.errors && item.errors.length > 0 && (
+                  <div>
+                    <p className="text-xs text-rose-500 mb-1">送信失敗 ({item.errors.length}件)</p>
+                    <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-xs space-y-1 max-h-[200px] overflow-y-auto">
+                      {item.errors.map((e, i) => (
+                        <div key={i}>
+                          <span className="text-rose-700 font-medium">{e.email}</span>
+                          <span className="text-rose-500 ml-2">{e.error}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
-                {item.skipped_count > 0 && (
-                  <span className="text-amber-600">スキップ {item.skipped_count}</span>
-                )}
-                <span className="text-slate-400">/ {item.total_recipients}名</span>
               </div>
-            </div>
+            )}
           </div>
-        ))
-      )}
+        )
+      })}
     </div>
   )
 }
