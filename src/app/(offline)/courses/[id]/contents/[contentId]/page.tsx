@@ -142,21 +142,15 @@ export default function ContentViewPage() {
       .eq('id', user.id)
   }, [user, contentId, content, progress])
 
-  // 動画終了時: 自動完了 → 次の動画へ遷移
+  // 動画終了時: 視聴完了を記録するのみ（自動遷移はしない）
   const handleVideoEnded = useCallback(async () => {
     if (autoNavigateRef.current) return
     autoNavigateRef.current = true
 
-    // 視聴完了を記録
     if (!progress.video) {
       await updateProgress('video_completed')
     }
-
-    // 次のコンテンツへ自動遷移
-    if (nextContent) {
-      router.push(`/courses/${courseId}/contents/${nextContent.id}`)
-    }
-  }, [progress.video, updateProgress, nextContent, courseId, router])
+  }, [progress.video, updateProgress])
 
   if (!content) {
     return (

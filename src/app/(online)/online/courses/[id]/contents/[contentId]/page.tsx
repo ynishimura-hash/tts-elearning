@@ -95,10 +95,8 @@ export default function OnlineContentViewPage() {
     if (!progress.video) {
       await updateProgress('video_completed')
     }
-    if (nextContent) {
-      router.push(`/online/courses/${courseId}/contents/${nextContent.id}`)
-    }
-  }, [progress.video, updateProgress, nextContent, courseId, router])
+    // 自動遷移は廃止（次のコンテンツへは手動でクリック）
+  }, [progress.video, updateProgress])
 
   if (!content) {
     return <div className="flex items-center justify-center h-64">
