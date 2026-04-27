@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { CalendarDays, MapPin, CheckCircle2, XCircle, Clock, HelpCircle } from 'lucide-react'
@@ -52,9 +53,14 @@ export default function StudySessionsPage() {
     }
     if (notes !== undefined) payload.notes = notes
 
-    await supabase
+    const { error } = await supabase
       .from('study_session_attendance')
       .upsert(payload, { onConflict: 'session_id,user_id' })
+
+    if (error) {
+      toast.error('登録に失敗しました', { description: error.message })
+      return
+    }
 
     setAttendance(prev => ({
       ...prev,
@@ -67,6 +73,11 @@ export default function StudySessionsPage() {
         responded_at: new Date().toISOString(),
       } as StudySessionAttendance,
     }))
+
+    toast.success(
+      status === 'attending' ? '「出席」で登録しました' : '「欠席」で登録しました',
+      { description: 'ご回答ありがとうございました' }
+    )
   }
 
   async function handleNotesUpdate(sessionId: string, notes: string) {
@@ -143,6 +154,19 @@ export default function StudySessionsPage() {
 
                   {/* 出欠回答 */}
                   <div className="border-t pt-4">
+                    {att && (
+                      <div className="mb-3 flex items-center gap-2">
+                        <span className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium ${
+                          att.status === 'attending' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {att.status === 'attending' ? (
+                            <><CheckCircle2 className="w-4 h-4" /> 出席で登録済み</>
+                          ) : (
+                            <><XCircle className="w-4 h-4" /> 欠席で登録済み</>
+                          )}
+                        </span>
+                      </div>
+                    )}
                     <p className="text-sm font-medium text-gray-700 mb-3">出欠回答</p>
                     <div className="flex gap-3">
                       <button
