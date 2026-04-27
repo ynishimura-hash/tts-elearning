@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Search, Eye, Edit, Save, X, Shield, ShieldOff, Trash2, ChevronDown, ChevronUp, CheckCircle2, Circle } from 'lucide-react'
+import { Search, Eye, Edit, Save, X, Shield, ShieldOff, Trash2, ChevronDown, ChevronUp, CheckCircle2, Circle, KeyRound, Sparkles } from 'lucide-react'
 import { formatDate, daysSince } from '@/lib/utils'
 import { ProgressBar } from '@/components/ProgressBar'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
@@ -25,6 +25,9 @@ export default function AdminUsersPage() {
     is_on_leave: false, withdrew_at: '',
   })
   const [saving, setSaving] = useState(false)
+  const [pwInput, setPwInput] = useState('')
+  const [pwSaving, setPwSaving] = useState(false)
+  const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null)
   const [userCourseProgress, setUserCourseProgress] = useState<{ name: string; done: number; total: number; courseId: string }[]>([])
   const [courseContentDetail, setCourseContentDetail] = useState<Record<string, { name: string; completed: boolean; completedAt: string | null }[]>>({})
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null)
@@ -134,6 +137,51 @@ export default function AdminUsersPage() {
       withdrew_at: user.withdrew_at ? user.withdrew_at.split('T')[0] : '',
     })
     setSelectedUser(null)
+    setPwInput('')
+    setPwMessage(null)
+  }
+
+  async function suggestCustomerId() {
+    try {
+      const res = await fetch(`/api/admin/users/next-customer-id?is_online=${editForm.is_online}`)
+      const data = await res.json()
+      if (data.success && data.next_customer_id) {
+        setEditForm({ ...editForm, customer_id: data.next_customer_id })
+      } else {
+        alert(data.error || '取得に失敗しました')
+      }
+    } catch {
+      alert('取得に失敗しました')
+    }
+  }
+
+  async function handleSetPassword() {
+    if (!editingUser) return
+    const pw = pwInput.trim()
+    if (pw.length < 6) {
+      setPwMessage({ ok: false, text: 'パスワードは6文字以上で指定してください' })
+      return
+    }
+    if (!confirm(`${editingUser.full_name} のパスワードを変更します。よろしいですか？`)) return
+    setPwSaving(true)
+    setPwMessage(null)
+    try {
+      const res = await fetch(`/api/admin/users/${editingUser.id}/set-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setPwMessage({ ok: true, text: data.message || '更新しました' })
+        setPwInput('')
+      } else {
+        setPwMessage({ ok: false, text: data.error || '更新に失敗しました' })
+      }
+    } catch {
+      setPwMessage({ ok: false, text: '通信エラーが発生しました' })
+    }
+    setPwSaving(false)
   }
 
   async function handleSaveUser(e: React.FormEvent) {
@@ -507,9 +555,18 @@ export default function AdminUsersPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">顧客ID</label>
-                  <input type="text" value={editForm.customer_id} onChange={(e) => setEditForm({ ...editForm, customer_id: e.target.value })}
-                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    顧客ID
+                    <span className="text-xs text-gray-400 ml-1">（{editForm.is_online ? 'オンライン' : '対面'}内でユニーク）</span>
+                  </label>
+                  <div className="flex gap-1">
+                    <input type="text" value={editForm.customer_id} onChange={(e) => setEditForm({ ...editForm, customer_id: e.target.value })}
+                      className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
+                    <button type="button" onClick={suggestCustomerId} title="次番を提案"
+                      className="px-2 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100">
+                      <Sparkles className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">カリキュラム</label>
@@ -566,6 +623,39 @@ export default function AdminUsersPage() {
                     className="mt-1 text-xs text-rose-600 hover:underline">退会日をクリア</button>
                 )}
               </div>
+              {/* パスワード設定セクション */}
+              <div className="border-t pt-4 mt-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+                  <KeyRound className="w-4 h-4 text-rose-600" /> パスワード設定
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  新しいパスワードを入力し「設定」を押すと、Supabase Auth に反映されます。Authアカウント未作成の場合は同時に作成されます。
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={pwInput}
+                    onChange={(e) => setPwInput(e.target.value)}
+                    placeholder="新しいパスワード（6文字以上）"
+                    autoComplete="new-password"
+                    className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-rose-500 outline-none font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSetPassword}
+                    disabled={pwSaving || pwInput.trim().length < 6}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 transition-colors"
+                  >
+                    <KeyRound className="w-4 h-4" /> {pwSaving ? '更新中...' : '設定'}
+                  </button>
+                </div>
+                {pwMessage && (
+                  <p className={`text-xs mt-2 ${pwMessage.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {pwMessage.text}
+                  </p>
+                )}
+              </div>
+
               <div className="flex gap-2 pt-2">
                 <button type="submit" disabled={saving}
                   className="flex items-center gap-2 px-6 py-2 bg-[#384a8f] text-white rounded-lg font-medium hover:bg-[#2d3d75] transition-colors disabled:opacity-50">
