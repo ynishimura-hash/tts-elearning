@@ -28,6 +28,16 @@ export default function AdminUsersPage() {
   const [pwInput, setPwInput] = useState('')
   const [pwSaving, setPwSaving] = useState(false)
   const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null)
+
+  // 新規作成
+  const [showCreate, setShowCreate] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    email: '', password: '', full_name: '', customer_id: '', curriculum: '',
+    drive_folder_url: '', is_online: false, is_free_user: false, is_admin: false,
+    is_test: false, community_member: false, myrule_permitted: false,
+  })
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
   const [userCourseProgress, setUserCourseProgress] = useState<{ name: string; done: number; total: number; courseId: string }[]>([])
   const [courseContentDetail, setCourseContentDetail] = useState<Record<string, { name: string; completed: boolean; completedAt: string | null }[]>>({})
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null)
@@ -139,6 +149,50 @@ export default function AdminUsersPage() {
     setSelectedUser(null)
     setPwInput('')
     setPwMessage(null)
+  }
+
+  async function suggestCustomerIdFor(isOnline: boolean, setter: (v: string) => void) {
+    try {
+      const res = await fetch(`/api/admin/users/next-customer-id?is_online=${isOnline}`)
+      const data = await res.json()
+      if (data.success && data.next_customer_id) setter(data.next_customer_id)
+      else alert(data.error || '取得に失敗しました')
+    } catch {
+      alert('取得に失敗しました')
+    }
+  }
+
+  function openCreateModal() {
+    setCreateForm({
+      email: '', password: '', full_name: '', customer_id: '', curriculum: '',
+      drive_folder_url: '', is_online: false, is_free_user: false, is_admin: false,
+      is_test: false, community_member: false, myrule_permitted: false,
+    })
+    setCreateError(null)
+    setShowCreate(true)
+  }
+
+  async function handleCreateUser(e: React.FormEvent) {
+    e.preventDefault()
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createForm),
+      })
+      const data = await res.json()
+      if (!data.success) {
+        setCreateError(data.error || '作成に失敗しました')
+      } else {
+        setShowCreate(false)
+        fetchData()
+      }
+    } catch {
+      setCreateError('通信エラーが発生しました')
+    }
+    setCreating(false)
   }
 
   async function suggestCustomerId() {
@@ -257,7 +311,13 @@ export default function AdminUsersPage() {
     <div className="space-y-6 pt-12 lg:pt-0">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">ユーザー管理</h1>
-        <span className="text-sm text-gray-500">{filtered.length}人 / {users.length}人</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">{filtered.length}人 / {users.length}人</span>
+          <button onClick={openCreateModal}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75] transition-colors">
+            <KeyRound className="w-4 h-4" /> 新規ユーザー作成
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -535,7 +595,7 @@ export default function AdminUsersPage() {
       {/* ユーザー編集モーダル */}
       {editingUser && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setEditingUser(null)}>
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 my-8" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 my-8" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-800">ユーザー編集</h2>
               <button onClick={() => setEditingUser(null)} className="p-2 hover:bg-gray-100 rounded-lg">
@@ -553,18 +613,52 @@ export default function AdminUsersPage() {
                 <input type="email" value={editForm.email} disabled
                   className="w-full px-4 py-2 border rounded-lg bg-gray-50 text-gray-500" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              {/* パスワード設定セクション（メールの直下） */}
+              <div className="bg-rose-50/50 border border-rose-100 rounded-lg p-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+                  <KeyRound className="w-4 h-4 text-rose-600" /> パスワード（上書き設定）
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  6文字以上を入力して「設定」を押すと Supabase Auth に反映されます。Auth未作成なら同時に作成。
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={pwInput}
+                    onChange={(e) => setPwInput(e.target.value)}
+                    placeholder="新しいパスワード"
+                    autoComplete="new-password"
+                    className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-rose-500 outline-none font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSetPassword}
+                    disabled={pwSaving || pwInput.trim().length < 6}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 transition-colors"
+                  >
+                    <KeyRound className="w-4 h-4" /> {pwSaving ? '更新中...' : '設定'}
+                  </button>
+                </div>
+                {pwMessage && (
+                  <p className={`text-xs mt-2 ${pwMessage.ok ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {pwMessage.text}
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     顧客ID
                     <span className="text-xs text-gray-400 ml-1">（{editForm.is_online ? 'オンライン' : '対面'}内でユニーク）</span>
                   </label>
-                  <div className="flex gap-1">
+                  <div className="flex gap-2">
                     <input type="text" value={editForm.customer_id} onChange={(e) => setEditForm({ ...editForm, customer_id: e.target.value })}
-                      className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
+                      className="flex-1 min-w-0 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
                     <button type="button" onClick={suggestCustomerId} title="次番を提案"
-                      className="px-2 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100">
-                      <Sparkles className="w-4 h-4" />
+                      className="flex-shrink-0 flex items-center gap-1 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 text-xs whitespace-nowrap">
+                      <Sparkles className="w-3.5 h-3.5" /> 次番
                     </button>
                   </div>
                 </div>
@@ -615,47 +709,21 @@ export default function AdminUsersPage() {
                 ))}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">退会日（設定すると退会扱い）</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">退会予定日（過ぎると退会扱い）</label>
                 <input type="date" value={editForm.withdrew_at} onChange={(e) => setEditForm({ ...editForm, withdrew_at: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-rose-500 outline-none" />
+                <p className="text-xs text-gray-400 mt-1">
+                  {editForm.withdrew_at
+                    ? new Date(editForm.withdrew_at) <= new Date()
+                      ? '⚠ 退会予定日を過ぎているため、現在「退会済み」扱いです'
+                      : '✓ 期限内（指定日を過ぎると自動的に退会扱いになります）'
+                    : '無期限'}
+                </p>
                 {editForm.withdrew_at && (
                   <button type="button" onClick={() => setEditForm({ ...editForm, withdrew_at: '' })}
-                    className="mt-1 text-xs text-rose-600 hover:underline">退会日をクリア</button>
+                    className="mt-1 text-xs text-rose-600 hover:underline">退会予定日をクリア（無期限に）</button>
                 )}
               </div>
-              {/* パスワード設定セクション */}
-              <div className="border-t pt-4 mt-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
-                  <KeyRound className="w-4 h-4 text-rose-600" /> パスワード設定
-                </label>
-                <p className="text-xs text-gray-500 mb-2">
-                  新しいパスワードを入力し「設定」を押すと、Supabase Auth に反映されます。Authアカウント未作成の場合は同時に作成されます。
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={pwInput}
-                    onChange={(e) => setPwInput(e.target.value)}
-                    placeholder="新しいパスワード（6文字以上）"
-                    autoComplete="new-password"
-                    className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-rose-500 outline-none font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSetPassword}
-                    disabled={pwSaving || pwInput.trim().length < 6}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 disabled:opacity-50 transition-colors"
-                  >
-                    <KeyRound className="w-4 h-4" /> {pwSaving ? '更新中...' : '設定'}
-                  </button>
-                </div>
-                {pwMessage && (
-                  <p className={`text-xs mt-2 ${pwMessage.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {pwMessage.text}
-                  </p>
-                )}
-              </div>
-
               <div className="flex gap-2 pt-2">
                 <button type="submit" disabled={saving}
                   className="flex items-center gap-2 px-6 py-2 bg-[#384a8f] text-white rounded-lg font-medium hover:bg-[#2d3d75] transition-colors disabled:opacity-50">
@@ -696,6 +764,104 @@ export default function AdminUsersPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 新規ユーザー作成モーダル */}
+      {showCreate && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={() => setShowCreate(false)}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 my-8" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-800">新規ユーザー作成</h2>
+              <button onClick={() => setShowCreate(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">氏名 <span className="text-red-500">*</span></label>
+                <input type="text" required value={createForm.full_name} onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">メールアドレス <span className="text-red-500">*</span></label>
+                <input type="email" required value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none"
+                  placeholder="user@example.com" />
+              </div>
+              <div className="bg-rose-50/50 border border-rose-100 rounded-lg p-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+                  <KeyRound className="w-4 h-4 text-rose-600" /> パスワード <span className="text-red-500">*</span>
+                </label>
+                <input type="text" required minLength={6} value={createForm.password}
+                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                  placeholder="6文字以上"
+                  autoComplete="new-password"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-rose-500 outline-none font-mono" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    顧客ID
+                    <span className="text-xs text-gray-400 ml-1">（{createForm.is_online ? 'オンライン' : '対面'}内でユニーク）</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input type="text" value={createForm.customer_id}
+                      onChange={(e) => setCreateForm({ ...createForm, customer_id: e.target.value })}
+                      className="flex-1 min-w-0 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
+                    <button type="button"
+                      onClick={() => suggestCustomerIdFor(createForm.is_online, (v) => setCreateForm({ ...createForm, customer_id: v }))}
+                      className="flex-shrink-0 flex items-center gap-1 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg hover:bg-amber-100 text-xs whitespace-nowrap">
+                      <Sparkles className="w-3.5 h-3.5" /> 次番
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">カリキュラム</label>
+                  <input type="text" value={createForm.curriculum}
+                    onChange={(e) => setCreateForm({ ...createForm, curriculum: e.target.value })}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">DriveフォルダURL</label>
+                <input type="url" value={createForm.drive_folder_url}
+                  onChange={(e) => setCreateForm({ ...createForm, drive_folder_url: e.target.value })}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
+              </div>
+              <div className="flex flex-wrap gap-4">
+                {[
+                  { key: 'is_online', label: 'オンライン受講生' },
+                  { key: 'is_free_user', label: '無料特典ユーザー' },
+                  { key: 'is_admin', label: '管理者' },
+                  { key: 'community_member', label: 'コミュニティメンバー' },
+                  { key: 'myrule_permitted', label: 'マイルール許可' },
+                  { key: 'is_test', label: 'テストアカウント' },
+                ].map((opt) => (
+                  <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox"
+                      checked={(createForm as Record<string, unknown>)[opt.key] as boolean}
+                      onChange={(e) => setCreateForm({ ...createForm, [opt.key]: e.target.checked })}
+                      className="rounded border-gray-300 text-[#384a8f] focus:ring-[#384a8f]" />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+              {createError && (
+                <div className="p-3 rounded-lg text-sm bg-rose-50 text-rose-700 border border-rose-200">
+                  {createError}
+                </div>
+              )}
+              <div className="flex gap-2 pt-2">
+                <button type="submit" disabled={creating}
+                  className="flex items-center gap-2 px-6 py-2 bg-[#384a8f] text-white rounded-lg font-medium hover:bg-[#2d3d75] disabled:opacity-50">
+                  <Save className="w-4 h-4" /> {creating ? '作成中...' : '作成'}
+                </button>
+                <button type="button" onClick={() => setShowCreate(false)}
+                  className="px-6 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200">キャンセル</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

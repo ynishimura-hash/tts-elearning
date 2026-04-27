@@ -100,10 +100,15 @@ export function Navigation({ mode }: { mode: NavMode }) {
         </div>
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
-          {items.map((item) => {
-            const Icon = item.icon
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/')
-            return (
+          {(() => {
+            // 最長プレフィックス一致でアクティブ項目を1つだけ決定
+            const matched = items
+              .filter((it) => pathname === it.href || pathname.startsWith(it.href + '/'))
+              .sort((a, b) => b.href.length - a.href.length)[0]
+            return items.map((item) => {
+              const Icon = item.icon
+              const isActive = matched?.href === item.href
+              return (
               <Link
                 key={item.href}
                 href={item.href}
@@ -119,7 +124,8 @@ export function Navigation({ mode }: { mode: NavMode }) {
                 {item.label}
               </Link>
             )
-          })}
+            })
+          })()}
         </nav>
 
         <div className="p-4 border-t border-white/20">
