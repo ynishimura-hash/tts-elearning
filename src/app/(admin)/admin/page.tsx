@@ -3,7 +3,14 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Users, BookOpen, CalendarDays, FileText, Bell, UserPlus, ChevronRight, HelpCircle } from 'lucide-react'
+import { Users, BookOpen, CalendarDays, FileText, Bell, UserPlus, ChevronRight, HelpCircle, Wrench } from 'lucide-react'
+
+type PendingPeakBottom = {
+  id: string
+  tradingview_username: string
+  applied_at: string
+  user: { full_name: string; email: string } | null
+}
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
@@ -19,15 +26,17 @@ export default function AdminDashboard() {
     upcomingSessions: 0,
     totalAnnouncements: 0,
     totalFaqs: 0,
+    pendingPeakBottom: 0,
   })
   const [recentApps, setRecentApps] = useState<{ id: string; full_name: string; course_type: string; created_at: string }[]>([])
+  const [pendingPeakBottomList, setPendingPeakBottomList] = useState<PendingPeakBottom[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const supabase = createClient()
 
     async function fetchStats() {
-      const [users, courses, contents, apps, sessions, announcements, faqs, recentApplications] = await Promise.all([
+      const [users, courses, contents, apps, sessions, announcements, faqs, recentApplications, peakBottomCount, peakBottomList] = await Promise.all([
         supabase.from('users').select('is_online, is_free_user, is_admin'),
         supabase.from('courses').select('id, is_online'),
         supabase.from('contents').select('id', { count: 'exact', head: true }),
@@ -38,6 +47,10 @@ export default function AdminDashboard() {
         supabase.from('faqs').select('id', { count: 'exact', head: true }),
         supabase.from('applications').select('id, full_name, course_type, created_at')
           .eq('status', 'pending').order('created_at', { ascending: false }).limit(5),
+        supabase.from('peak_bottom_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('peak_bottom_applications')
+          .select('id, tradingview_username, applied_at, user:users!peak_bottom_applications_user_id_fkey(full_name, email)')
+          .eq('status', 'pending').order('applied_at', { ascending: false }).limit(5),
       ])
 
       const userData = users.data || []
@@ -57,9 +70,13 @@ export default function AdminDashboard() {
         upcomingSessions: sessions.count || 0,
         totalAnnouncements: announcements.count || 0,
         totalFaqs: faqs.count || 0,
+        pendingPeakBottom: peakBottomCount.count || 0,
       })
 
       if (recentApplications.data) setRecentApps(recentApplications.data)
+      if (peakBottomList.data) {
+        setPendingPeakBottomList(peakBottomList.data as unknown as PendingPeakBottom[])
+      }
       setLoading(false)
     }
 
@@ -75,6 +92,7 @@ export default function AdminDashboard() {
     { label: 'コンテンツ数', value: stats.totalContents, icon: FileText, color: 'bg-orange-100 text-orange-600', href: '/admin/courses' },
     { label: '未処理の申込', value: stats.pendingApplications, icon: UserPlus, color: stats.pendingApplications > 0 ? 'bg-red-100 text-red-600 ring-2 ring-red-200' : 'bg-red-100 text-red-600', href: '/admin/applications' },
     { label: '今後の勉強会', value: stats.upcomingSessions, icon: CalendarDays, color: 'bg-teal-100 text-teal-600', href: '/admin/study-sessions' },
+    { label: 'ピークボトム申請中', value: stats.pendingPeakBottom, icon: Wrench, color: stats.pendingPeakBottom > 0 ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-300' : 'bg-amber-100 text-amber-700', href: '/admin/peak-bottom' },
   ]
 
   if (loading) {
@@ -142,6 +160,44 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <p className="text-sm text-gray-400 text-center py-4">未処理の申込はありません</p>
+          )}
+        </div>
+
+        {/* ピークボトム申請中 */}
+        <div className={`bg-white rounded-xl p-5 shadow-sm ${stats.pendingPeakBottom > 0 ? 'ring-2 ring-amber-200' : ''}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <Wrench className="w-5 h-5 text-amber-600" />
+              ピークボトム申請中
+              {stats.pendingPeakBottom > 0 && (
+                <span className="px-2 py-0.5 rounded text-xs bg-amber-500 text-white">{stats.pendingPeakBottom}</span>
+              )}
+            </h2>
+            <Link href="/admin/peak-bottom" className="text-sm text-[#384a8f] hover:underline">
+              すべて見る
+            </Link>
+          </div>
+          {pendingPeakBottomList.length > 0 ? (
+            <div className="space-y-3">
+              {pendingPeakBottomList.map((app) => (
+                <div key={app.id} className="flex items-center justify-between p-3 bg-amber-50/60 rounded-lg">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-800 text-sm truncate">
+                      {app.user?.full_name || '不明'}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">
+                      TradingView: <span className="font-mono">{app.tradingview_username}</span>
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {new Date(app.applied_at).toLocaleString('ja-JP')}
+                    </p>
+                  </div>
+                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded flex-shrink-0">申請中</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-4">申請中はありません</p>
           )}
         </div>
 
