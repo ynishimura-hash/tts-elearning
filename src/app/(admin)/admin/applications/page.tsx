@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { CheckCircle2, XCircle, Search, Link2, Plus, Copy, Trash2, CreditCard, UserPlus, ExternalLink } from 'lucide-react'
+import Link from 'next/link'
+import { CheckCircle2, XCircle, Search, Link2, Plus, Copy, CreditCard, UserCheck, ExternalLink, Wallet } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
 import type { Application } from '@/types/database'
 
@@ -114,14 +115,6 @@ export default function AdminApplicationsPage() {
         alert('決済URLをメールで送信しました')
       } catch {}
     }
-    fetchData()
-  }
-
-  // 入金済みに変更
-  async function markPaid(id: string) {
-    if (!confirm('入金確認済みに変更しますか？')) return
-    const supabase = createClient()
-    await supabase.from('applications').update({ payment_status: 'paid' }).eq('id', id)
     fetchData()
   }
 
@@ -256,10 +249,20 @@ export default function AdminApplicationsPage() {
             </div>
           </div>
 
+          {/* オンライン申込の入金処理は別画面へ */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900 flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-blue-600 flex-shrink-0" />
+            <span>
+              <strong>オンライン申込の入金確認・アカウント発行</strong>は
+              <Link href="/admin/payments" className="underline font-bold mx-1">入金管理</Link>
+              ページから行ってください。
+            </span>
+          </div>
+
           <div className="space-y-4">
             {filtered.map(app => {
-              const paymentStatus = (app as any).payment_status || 'unpaid'
-              const paymentUrl = (app as any).payment_url
+              const paymentStatus = (app as Application & { payment_status?: string }).payment_status || 'unpaid'
+              const accountIssued = !!(app as Application & { user_id?: string }).user_id
               return (
                 <div key={app.id} className={`bg-white rounded-xl p-5 shadow-sm ${app.status === 'pending' ? 'ring-2 ring-yellow-200' : ''}`}>
                   <div className="flex items-start justify-between mb-3">
@@ -278,14 +281,19 @@ export default function AdminApplicationsPage() {
                         }`}>
                           {app.course_type === 'offline' ? '対面' : 'オンライン'}
                         </span>
-                        {/* 入金ステータス */}
+                        {/* 入金ステータス（バッジ） */}
                         <span className={`text-xs px-2 py-0.5 rounded ${
                           paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-700' :
-                          paymentUrl ? 'bg-amber-100 text-amber-700' :
                           'bg-gray-100 text-gray-500'
                         }`}>
-                          {paymentStatus === 'paid' ? '入金済み' : paymentUrl ? '決済URL送信済み' : '未入金'}
+                          {paymentStatus === 'paid' ? '入金済み' : '未入金'}
                         </span>
+                        {/* アカウント発行ステータス（user_id がある＝発行済み） */}
+                        {accountIssued && (
+                          <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 inline-flex items-center gap-1">
+                            <UserCheck className="w-3 h-3" />アカウント発行済み
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-gray-500">{app.email} {app.phone && `/ ${app.phone}`}</p>
                       <p className="text-xs text-gray-400 mt-1">
@@ -309,22 +317,19 @@ export default function AdminApplicationsPage() {
                         </button>
                       </>
                     )}
-                    {app.status === 'approved' && paymentStatus !== 'paid' && (
-                      <>
-                        <button onClick={() => sendPaymentLink(app.id)}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-[#e39f3c] text-white rounded-lg text-sm font-medium hover:bg-[#d08f30]">
-                          <CreditCard className="w-4 h-4" /> {paymentUrl ? '決済URL再送' : '決済URL送信'}
-                        </button>
-                        <button onClick={() => markPaid(app.id)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-100">
-                          <CheckCircle2 className="w-4 h-4" /> 入金確認済み
-                        </button>
-                      </>
+                    {/* オンライン申込の入金関連は /admin/payments へリンク誘導 */}
+                    {app.course_type === 'online' && app.status === 'approved' && paymentStatus !== 'paid' && (
+                      <Link href="/admin/payments"
+                        className="flex items-center gap-1.5 px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75]">
+                        <Wallet className="w-4 h-4" /> 入金管理で処理する
+                      </Link>
                     )}
-                    {paymentStatus === 'paid' && !(app as any).account_created && (
-                      <span className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium">
-                        <UserPlus className="w-4 h-4" /> アカウント発行待ち
-                      </span>
+                    {/* 対面申込はここで決済URL送信 */}
+                    {app.course_type === 'offline' && app.status === 'approved' && paymentStatus !== 'paid' && (
+                      <button onClick={() => sendPaymentLink(app.id)}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-[#e39f3c] text-white rounded-lg text-sm font-medium hover:bg-[#d08f30]">
+                        <CreditCard className="w-4 h-4" /> 決済URL送信
+                      </button>
                     )}
                   </div>
                 </div>
