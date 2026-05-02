@@ -17,6 +17,10 @@ interface NotifyArgs {
  * GAS 連携用に Gmail SMTP 経由で通知メールを送信
  * 件名に「【TTS申請通知】」を含めることで GAS 側で振り分け可能
  */
+// GAS（PayPal通知スクリプト）のオーナーアカウントへ送信。
+// 環境変数 PEAK_BOTTOM_NOTIFY_TO で上書き可能。
+const NOTIFY_TO = process.env.PEAK_BOTTOM_NOTIFY_TO || 'kudo@creatte.jp'
+
 async function notifyByEmail({ fullName, email, tradingviewUsername, isUpdate }: NotifyArgs): Promise<void> {
   const user = process.env.GMAIL_USER
   const pass = process.env.GMAIL_APP_PASSWORD
@@ -46,7 +50,7 @@ async function notifyByEmail({ fullName, email, tradingviewUsername, isUpdate }:
     })
     await transporter.sendMail({
       from: `"TTS システム通知" <${user}>`,
-      to: user, // 自分宛に送信（GAS が同じ受信箱を読む）
+      to: NOTIFY_TO,
       subject,
       text,
     })
