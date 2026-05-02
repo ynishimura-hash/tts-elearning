@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -12,7 +12,14 @@ import { cn } from '@/lib/utils'
 
 type NavMode = 'offline' | 'online' | 'admin' | 'free'
 
-const navItems: Record<NavMode, { href: string; label: string; icon: React.ElementType }[]> = {
+type NavItem = {
+  href: string
+  label: string
+  icon: React.ElementType
+  badgeKey?: 'peakBottomPending' | 'applicationsPending'
+}
+
+const navItems: Record<NavMode, NavItem[]> = {
   offline: [
     { href: '/home', label: 'ホーム', icon: Home },
     { href: '/courses', label: 'コース一覧', icon: BookOpen },
@@ -41,12 +48,12 @@ const navItems: Record<NavMode, { href: string; label: string; icon: React.Eleme
     { href: '/admin/courses', label: 'コース管理', icon: BookOpen },
     { href: '/admin/announcements', label: 'お知らせ管理', icon: Bell },
     { href: '/admin/study-sessions', label: '勉強会管理', icon: CalendarDays },
+    { href: '/admin/peak-bottom', label: 'ピークボトム申請', icon: Wrench, badgeKey: 'peakBottomPending' },
     { href: '/admin/questions', label: '質問管理', icon: MessageSquare },
     { href: '/admin/consultations', label: '個別相談', icon: Users },
     { href: '/admin/blog', label: 'ブログ管理', icon: FileText },
     { href: '/admin/qa', label: 'Q&A管理', icon: HelpCircle },
-    { href: '/admin/applications', label: '申込管理', icon: UserPlus },
-    { href: '/admin/peak-bottom', label: 'ピークボトム申請', icon: Wrench },
+    { href: '/admin/applications', label: '申込管理', icon: UserPlus, badgeKey: 'applicationsPending' },
     { href: '/admin/line-groups', label: 'LINEグループ', icon: MessageCircle },
     { href: '/admin/broadcasts', label: 'メール配信', icon: Mail },
   ],
@@ -56,10 +63,42 @@ const navItems: Record<NavMode, { href: string; label: string; icon: React.Eleme
   ],
 }
 
+type Badges = {
+  peakBottomPending: number
+  applicationsPending: number
+}
+
 export function Navigation({ mode }: { mode: NavMode }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [badges, setBadges] = useState<Badges>({ peakBottomPending: 0, applicationsPending: 0 })
   const items = navItems[mode]
+
+  // 管理者用バッジ件数を取得（30秒ごと再取得）
+  useEffect(() => {
+    if (mode !== 'admin') return
+    const supabase = createClient()
+    let cancelled = false
+
+    async function fetchBadges() {
+      const [pb, ap] = await Promise.all([
+        supabase.from('peak_bottom_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+      ])
+      if (cancelled) return
+      setBadges({
+        peakBottomPending: pb.count || 0,
+        applicationsPending: ap.count || 0,
+      })
+    }
+
+    fetchBadges()
+    const timer = setInterval(fetchBadges, 30_000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [mode])
 
   async function handleLogout() {
     const supabase = createClient()
@@ -110,22 +149,28 @@ export function Navigation({ mode }: { mode: NavMode }) {
             return items.map((item) => {
               const Icon = item.icon
               const isActive = matched?.href === item.href
+              const badgeCount = item.badgeKey ? badges[item.badgeKey] : 0
               return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm',
-                  isActive
-                    ? 'bg-white/20 text-white font-medium'
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                )}
-              >
-                <Icon className="w-5 h-5 flex-shrink-0" />
-                {item.label}
-              </Link>
-            )
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm',
+                    isActive
+                      ? 'bg-white/20 text-white font-medium'
+                      : 'text-white/70 hover:bg-white/10 hover:text-white'
+                  )}
+                >
+                  <Icon className="w-5 h-5 flex-shrink-0" />
+                  <span className="flex-1 truncate">{item.label}</span>
+                  {badgeCount > 0 && (
+                    <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold bg-amber-500 text-white">
+                      {badgeCount}
+                    </span>
+                  )}
+                </Link>
+              )
             })
           })()}
         </nav>
