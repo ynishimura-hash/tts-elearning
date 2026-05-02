@@ -1,127 +1,141 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
-import Link from 'next/link'
-import { CheckCircle2, XCircle, Search, Link2, Plus, Copy, CreditCard, UserCheck, ExternalLink, Wallet } from 'lucide-react'
+import {
+  Search, Trash2, ChevronDown, Mail, Phone, MapPin, CalendarDays,
+  Clock, CheckCircle2, Wallet, UserCheck, Copy, Check, ExternalLink, Link2,
+} from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
 import type { Application } from '@/types/database'
 
-interface EnrollmentLink {
-  id: string
-  code: string
-  course_type: string
-  label: string | null
-  monthly_price: number
-  is_active: boolean
-  used_count: number
-  created_at: string
+type AppRow = Application & {
+  payment_status?: 'unpaid' | 'paid' | 'cancelled'
+  user_id?: string | null
 }
 
+type StatusKey = 'applied' | 'awaiting_payment' | 'paid'
+
+const STATUS_LABELS: Record<StatusKey, { label: string; color: string; ring: string }> = {
+  applied: { label: '申し込み済み', color: 'bg-blue-100 text-blue-700', ring: 'ring-blue-200' },
+  awaiting_payment: { label: '入金待ち', color: 'bg-amber-100 text-amber-700', ring: 'ring-amber-200' },
+  paid: { label: '入金済み', color: 'bg-emerald-100 text-emerald-700', ring: 'ring-emerald-200' },
+}
+
+function getStatusKey(app: AppRow): StatusKey {
+  if (app.payment_status === 'paid') return 'paid'
+  if (app.status === 'approved') return 'awaiting_payment'
+  return 'applied'
+}
+
+const ONLINE_APPLY_URL = 'https://tts-e.vercel.app/apply/online'
+const OFFLINE_APPLY_URL = 'https://tts-e.vercel.app/apply/offline'
+
 export default function AdminApplicationsPage() {
-  const [tab, setTab] = useState<'applications' | 'links'>('applications')
-  const [applications, setApplications] = useState<Application[]>([])
-  const [links, setLinks] = useState<EnrollmentLink[]>([])
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
+  const [applications, setApplications] = useState<AppRow[]>([])
+  const [filter, setFilter] = useState<'all' | StatusKey>('all')
+  const [courseFilter, setCourseFilter] = useState<'all' | 'online' | 'offline'>('all')
   const [search, setSearch] = useState('')
-  const [showLinkForm, setShowLinkForm] = useState(false)
-  const [linkForm, setLinkForm] = useState({ label: '', course_type: 'offline', monthly_price: '' })
-  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
   async function fetchData() {
     const supabase = createClient()
-    const { data: apps } = await supabase.from('applications').select('*').order('created_at', { ascending: false })
-    if (apps) setApplications(apps)
-    const { data: lnks } = await supabase.from('enrollment_links').select('*').order('created_at', { ascending: false })
-    if (lnks) setLinks(lnks)
+    const { data: apps } = await supabase
+      .from('applications')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (apps) setApplications(apps as AppRow[])
   }
 
-  // URL発行
-  async function createLink(e: React.FormEvent) {
-    e.preventDefault()
-    const code = Math.random().toString(36).substring(2, 10)
-    const supabase = createClient()
-    await supabase.from('enrollment_links').insert({
-      code,
-      course_type: linkForm.course_type,
-      label: linkForm.label || null,
-      monthly_price: linkForm.monthly_price ? parseInt(linkForm.monthly_price) : 0,
-    })
-    setShowLinkForm(false)
-    setLinkForm({ label: '', course_type: 'offline', monthly_price: '' })
-    fetchData()
-  }
-
-  // URLコピー
-  function copyUrl(code: string, id: string) {
-    const url = `${window.location.origin}/enroll/${code}`
-    navigator.clipboard.writeText(url)
-    setCopiedId(id)
-    setTimeout(() => setCopiedId(null), 2000)
-  }
-
-  // URL無効化
-  async function toggleLink(id: string, isActive: boolean) {
-    const supabase = createClient()
-    await supabase.from('enrollment_links').update({ is_active: !isActive }).eq('id', id)
-    fetchData()
-  }
-
-  // 申込承認
-  async function handleAction(id: string, status: 'approved' | 'rejected') {
-    const actionLabel = status === 'approved' ? '承認' : '却下'
-    if (!confirm(`この申込を${actionLabel}しますか？`)) return
-    const supabase = createClient()
-    await supabase.from('applications').update({ status, processed_at: new Date().toISOString() }).eq('id', id)
-    if (status === 'approved') {
-      const app = applications.find(a => a.id === id)
-      if (app) {
-        try {
-          await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              to: app.email,
-              subject: '【TTS e-ラーニング】受講申込が承認されました',
-              body: `${app.full_name} 様\n\nTTS e-ラーニングへの受講申込が承認されました。\n\n後日、ログイン情報をお送りいたしますので、しばらくお待ちください。\n\n---\nTTS トレーダー養成訓練学校`,
-            }),
-          })
-        } catch {}
+  async function changeStatus(app: AppRow, next: StatusKey) {
+    const current = getStatusKey(app)
+    if (current === next) {
+      setOpenMenuId(null)
+      return
+    }
+    if (next === 'paid') {
+      if (!confirm(
+        `${app.full_name} さんを「入金済み」にします。\n\n` +
+        (app.course_type === 'online'
+          ? '【自動処理】\n1. Driveフォルダを複製\n2. e-ラーニングアカウント発行\n3. ウェルカムメール送信\n\n'
+          : '') +
+        '実行しますか？'
+      )) {
+        setOpenMenuId(null)
+        return
       }
+      setUpdatingId(app.id)
+      try {
+        const res = await fetch(`/api/admin/applications/${app.id}/confirm-payment`, { method: 'POST' })
+        const data = await res.json()
+        if (data.success) {
+          toast.success('「入金済み」に変更しました', {
+            description: app.course_type === 'online'
+              ? `${data.drive_ok ? '✓ Drive ' : '⚠ Drive '}${data.mail_sent ? '✓ メール' : '⚠ メール'}`
+              : undefined,
+          })
+          fetchData()
+        } else {
+          toast.error(data.error || '失敗しました')
+        }
+      } catch {
+        toast.error('通信エラー')
+      }
+      setUpdatingId(null)
+      setOpenMenuId(null)
+      return
     }
+
+    // 申し込み済み / 入金待ちは単純なステータス更新
+    setUpdatingId(app.id)
+    const supabase = createClient()
+    const update: Record<string, unknown> = {
+      processed_at: new Date().toISOString(),
+    }
+    if (next === 'applied') {
+      update.status = 'pending'
+      update.payment_status = 'unpaid'
+    } else if (next === 'awaiting_payment') {
+      update.status = 'approved'
+      update.payment_status = 'unpaid'
+    }
+    const { error } = await supabase.from('applications').update(update).eq('id', app.id)
+    if (error) toast.error(error.message)
+    else toast.success(`「${STATUS_LABELS[next].label}」に変更しました`)
+    setUpdatingId(null)
+    setOpenMenuId(null)
     fetchData()
   }
 
-  // 入金URLを設定してメール送信
-  async function sendPaymentLink(id: string) {
-    const paymentUrl = prompt('PayPal決済URLを入力してください:')
-    if (!paymentUrl) return
-    const supabase = createClient()
-    await supabase.from('applications').update({ payment_url: paymentUrl }).eq('id', id)
-    const app = applications.find(a => a.id === id)
-    if (app) {
-      try {
-        await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            to: app.email,
-            subject: '【TTS e-ラーニング】お支払いのご案内',
-            body: `${app.full_name} 様\n\nTTS e-ラーニングへのお申し込みありがとうございます。\n\n以下のリンクからお支払い手続きをお願いいたします。\n\n▼ お支払いページ\n${paymentUrl}\n\n---\nTTS トレーダー養成訓練学校`,
-          }),
-        })
-        alert('決済URLをメールで送信しました')
-      } catch {}
+  async function handleDelete(app: AppRow) {
+    if (!confirm(`${app.full_name} さんの申込を削除します。実行しますか？`)) return
+    setUpdatingId(app.id)
+    const res = await fetch(`/api/admin/applications/${app.id}`, { method: 'DELETE' })
+    const data = await res.json()
+    if (data.success) {
+      toast.success('削除しました')
+      fetchData()
+    } else {
+      toast.error(data.error || '削除失敗')
     }
-    fetchData()
+    setUpdatingId(null)
+  }
+
+  async function copyUrl(url: string, key: string) {
+    await navigator.clipboard.writeText(url)
+    setCopiedKey(key)
+    toast.success('URLをコピーしました')
+    setTimeout(() => setCopiedKey(null), 1500)
   }
 
   const filtered = applications.filter(app => {
-    if (filter === 'pending' && app.status !== 'pending') return false
-    if (filter === 'approved' && app.status !== 'approved') return false
-    if (filter === 'rejected' && app.status !== 'rejected') return false
+    if (filter !== 'all' && getStatusKey(app) !== filter) return false
+    if (courseFilter !== 'all' && app.course_type !== courseFilter) return false
     if (search) {
       const s = search.toLowerCase()
       return app.full_name.toLowerCase().includes(s) || app.email.toLowerCase().includes(s)
@@ -129,218 +143,174 @@ export default function AdminApplicationsPage() {
     return true
   })
 
-  const pendingCount = applications.filter(a => a.status === 'pending').length
+  const counts = {
+    all: applications.length,
+    applied: applications.filter(a => getStatusKey(a) === 'applied').length,
+    awaiting_payment: applications.filter(a => getStatusKey(a) === 'awaiting_payment').length,
+    paid: applications.filter(a => getStatusKey(a) === 'paid').length,
+  }
 
   return (
     <div className="space-y-6 pt-12 lg:pt-0">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-gray-800">申込管理</h1>
-        {pendingCount > 0 && (
-          <span className="bg-red-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">{pendingCount}件未処理</span>
-        )}
       </div>
 
-      {/* タブ */}
-      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
-        <button onClick={() => setTab('applications')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'applications' ? 'bg-white shadow text-gray-800' : 'text-gray-500'}`}>
-          申込一覧
-        </button>
-        <button onClick={() => setTab('links')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${tab === 'links' ? 'bg-white shadow text-gray-800' : 'text-gray-500'}`}>
-          申込URL管理
-        </button>
-      </div>
-
-      {/* === 申込URL管理タブ === */}
-      {tab === 'links' && (
-        <div className="space-y-4">
-          <button onClick={() => setShowLinkForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75]">
-            <Plus className="w-4 h-4" /> 新しい申込URLを発行
-          </button>
-
-          {showLinkForm && (
-            <form onSubmit={createLink} className="bg-white rounded-xl p-5 shadow-sm space-y-4">
-              <h3 className="font-bold text-gray-800">申込URL発行</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">ラベル</label>
-                  <input type="text" value={linkForm.label} onChange={(e) => setLinkForm({ ...linkForm, label: e.target.value })}
-                    placeholder="例: 2026年4月入会"
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none text-sm" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">コース種別</label>
-                  <select value={linkForm.course_type} onChange={(e) => setLinkForm({ ...linkForm, course_type: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none text-sm">
-                    <option value="offline">対面</option>
-                    <option value="online">オンライン</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">月額料金(円)</label>
-                  <input type="number" value={linkForm.monthly_price} onChange={(e) => setLinkForm({ ...linkForm, monthly_price: e.target.value })}
-                    placeholder="例: 5000"
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none text-sm" />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button type="submit" className="px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium">発行</button>
-                <button type="button" onClick={() => setShowLinkForm(false)} className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm">キャンセル</button>
-              </div>
-            </form>
-          )}
-
-          {links.map(link => (
-            <div key={link.id} className={`bg-white rounded-xl p-5 shadow-sm ${!link.is_active ? 'opacity-50' : ''}`}>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Link2 className="w-4 h-4 text-[#384a8f]" />
-                  <span className="font-bold text-gray-800">{link.label || '無題'}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded ${link.course_type === 'online' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>
-                    {link.course_type === 'online' ? 'オンライン' : '対面'}
-                  </span>
-                  {link.monthly_price > 0 && (
-                    <span className="text-xs text-[#e39f3c] font-medium">¥{link.monthly_price.toLocaleString()}/月</span>
-                  )}
-                  <span className="text-xs text-gray-400">{link.used_count}名申込</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => copyUrl(link.code, link.id)}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                      copiedId === link.id ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                    }`}>
-                    <Copy className="w-3 h-3" /> {copiedId === link.id ? 'コピー済み!' : 'URLをコピー'}
-                  </button>
-                  <button onClick={() => toggleLink(link.id, link.is_active)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium ${link.is_active ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
-                    {link.is_active ? '無効化' : '有効化'}
-                  </button>
-                </div>
-              </div>
-              <div className="bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-500 font-mono truncate">
-                {typeof window !== 'undefined' ? `${window.location.origin}/enroll/${link.code}` : `/enroll/${link.code}`}
-              </div>
-            </div>
-          ))}
+      {/* 申込フォームURL（2つ） */}
+      <div className="bg-gradient-to-r from-[#384a8f]/5 to-[#e39f3c]/5 border border-[#384a8f]/20 rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Link2 className="w-4 h-4 text-[#384a8f]" />
+          <p className="text-sm font-medium text-gray-700">申込フォームURL（受講希望者にお渡しください）</p>
         </div>
-      )}
-
-      {/* === 申込一覧タブ === */}
-      {tab === 'applications' && (
-        <>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-                placeholder="名前またはメールで検索"
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {(['all', 'pending', 'approved', 'rejected'] as const).map(f => (
-                <button key={f} onClick={() => setFilter(f)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    filter === f ? 'bg-[#384a8f] text-white' : 'bg-white text-gray-600 hover:bg-gray-100'
-                  }`}>
-                  {{ all: 'すべて', pending: '未処理', approved: '承認済', rejected: '却下' }[f]}
-                </button>
-              ))}
-            </div>
+        {[
+          { key: 'online', label: 'オンライン受講', url: ONLINE_APPLY_URL, color: 'bg-purple-100 text-purple-700' },
+          { key: 'offline', label: '対面受講', url: OFFLINE_APPLY_URL, color: 'bg-green-100 text-green-700' },
+        ].map((u) => (
+          <div key={u.key} className="flex items-center gap-2 flex-wrap">
+            <span className={`text-xs px-2 py-1 rounded font-medium ${u.color} flex-shrink-0`}>{u.label}</span>
+            <code className="flex-1 min-w-0 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-mono text-slate-700 truncate">
+              {u.url}
+            </code>
+            <button onClick={() => copyUrl(u.url, u.key)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75]">
+              {copiedKey === u.key ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {copiedKey === u.key ? 'コピー済み' : 'コピー'}
+            </button>
+            <a href={u.url} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50">
+              <ExternalLink className="w-4 h-4" />
+            </a>
           </div>
+        ))}
+      </div>
 
-          {/* オンライン申込の入金処理は別画面へ */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-sm text-blue-900 flex items-center gap-2">
-            <Wallet className="w-4 h-4 text-blue-600 flex-shrink-0" />
-            <span>
-              <strong>オンライン申込の入金確認・アカウント発行</strong>は
-              <Link href="/admin/payments" className="underline font-bold mx-1">入金管理</Link>
-              ページから行ってください。
-            </span>
+      {/* 検索＋フィルタ */}
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            placeholder="名前またはメールで検索"
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {([
+            { key: 'all' as const, label: 'すべて', count: counts.all, color: 'bg-[#384a8f]' },
+            { key: 'applied' as const, label: '申し込み済み', count: counts.applied, color: 'bg-blue-500' },
+            { key: 'awaiting_payment' as const, label: '入金待ち', count: counts.awaiting_payment, color: 'bg-amber-500' },
+            { key: 'paid' as const, label: '入金済み', count: counts.paid, color: 'bg-emerald-500' },
+          ]).map(f => (
+            <button key={f.key} onClick={() => setFilter(f.key)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${
+                filter === f.key ? `${f.color} text-white` : 'bg-white text-gray-600 border border-slate-200 hover:bg-gray-50'
+              }`}>
+              {f.label}
+              <span className={`px-2 py-0.5 rounded text-xs ${filter === f.key ? 'bg-white/20' : 'bg-gray-100'}`}>{f.count}</span>
+            </button>
+          ))}
+          <div className="ml-auto flex gap-1">
+            {(['all', 'online', 'offline'] as const).map(c => (
+              <button key={c} onClick={() => setCourseFilter(c)}
+                className={`px-3 py-2 rounded-lg text-xs font-medium ${
+                  courseFilter === c ? 'bg-slate-700 text-white' : 'bg-white text-gray-600 border border-slate-200'
+                }`}>
+                {c === 'all' ? '全種別' : c === 'online' ? 'オンライン' : '対面'}
+              </button>
+            ))}
           </div>
+        </div>
+      </div>
 
-          <div className="space-y-4">
-            {filtered.map(app => {
-              const paymentStatus = (app as Application & { payment_status?: string }).payment_status || 'unpaid'
-              const accountIssued = !!(app as Application & { user_id?: string }).user_id
-              return (
-                <div key={app.id} className={`bg-white rounded-xl p-5 shadow-sm ${app.status === 'pending' ? 'ring-2 ring-yellow-200' : ''}`}>
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h3 className="font-bold text-gray-800">{app.full_name}</h3>
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          app.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                          app.status === 'approved' ? 'bg-green-100 text-green-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
-                          {app.status === 'pending' ? '未処理' : app.status === 'approved' ? '承認済み' : '却下'}
-                        </span>
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          app.course_type === 'offline' ? 'bg-green-50 text-green-600' : 'bg-purple-50 text-purple-600'
-                        }`}>
-                          {app.course_type === 'offline' ? '対面' : 'オンライン'}
-                        </span>
-                        {/* 入金ステータス（バッジ） */}
-                        <span className={`text-xs px-2 py-0.5 rounded ${
-                          paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-700' :
-                          'bg-gray-100 text-gray-500'
-                        }`}>
-                          {paymentStatus === 'paid' ? '入金済み' : '未入金'}
-                        </span>
-                        {/* アカウント発行ステータス（user_id がある＝発行済み） */}
-                        {accountIssued && (
-                          <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 inline-flex items-center gap-1">
-                            <UserCheck className="w-3 h-3" />アカウント発行済み
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-500">{app.email} {app.phone && `/ ${app.phone}`}</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        申込日: {formatDateTime(app.created_at)}
-                        {app.processed_at && ` / 処理日: ${formatDateTime(app.processed_at)}`}
-                      </p>
-                    </div>
+      {/* 申込一覧 */}
+      <div className="space-y-2">
+        {filtered.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 text-center text-gray-400">該当する申込はありません</div>
+        ) : (
+          filtered.map(app => {
+            const statusKey = getStatusKey(app)
+            const accountIssued = !!app.user_id
+            const status = STATUS_LABELS[statusKey]
+            return (
+              <div key={app.id}
+                className={`bg-white rounded-xl px-4 py-3 shadow-sm border ${
+                  statusKey === 'applied' ? 'border-blue-200' :
+                  statusKey === 'awaiting_payment' ? 'border-amber-200' :
+                  'border-emerald-200'
+                }`}>
+                {/* 1行目: 名前 + ステータス + 操作 */}
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <h3 className="font-bold text-gray-800">{app.full_name}</h3>
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      app.course_type === 'offline' ? 'bg-green-50 text-green-700' : 'bg-purple-50 text-purple-700'
+                    }`}>
+                      {app.course_type === 'offline' ? '対面' : 'オンライン'}
+                    </span>
+                    {accountIssued && (
+                      <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 inline-flex items-center gap-1">
+                        <UserCheck className="w-3 h-3" />アカウント発行済み
+                      </span>
+                    )}
                   </div>
-                  {app.message && <p className="text-gray-600 text-sm bg-gray-50 rounded-lg p-3 mb-3">{app.message}</p>}
-
-                  <div className="flex gap-2 flex-wrap">
-                    {app.status === 'pending' && (
-                      <>
-                        <button onClick={() => handleAction(app.id, 'approved')}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
-                          <CheckCircle2 className="w-4 h-4" /> 承認
-                        </button>
-                        <button onClick={() => handleAction(app.id, 'rejected')}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-700 rounded-lg text-sm font-medium hover:bg-red-100">
-                          <XCircle className="w-4 h-4" /> 却下
-                        </button>
-                      </>
-                    )}
-                    {/* オンライン申込の入金関連は /admin/payments へリンク誘導 */}
-                    {app.course_type === 'online' && app.status === 'approved' && paymentStatus !== 'paid' && (
-                      <Link href="/admin/payments"
-                        className="flex items-center gap-1.5 px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75]">
-                        <Wallet className="w-4 h-4" /> 入金管理で処理する
-                      </Link>
-                    )}
-                    {/* 対面申込はここで決済URL送信 */}
-                    {app.course_type === 'offline' && app.status === 'approved' && paymentStatus !== 'paid' && (
-                      <button onClick={() => sendPaymentLink(app.id)}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-[#e39f3c] text-white rounded-lg text-sm font-medium hover:bg-[#d08f30]">
-                        <CreditCard className="w-4 h-4" /> 決済URL送信
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {/* ステータス切替ドロップダウン */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setOpenMenuId(openMenuId === app.id ? null : app.id)}
+                        disabled={updatingId === app.id}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${status.color} hover:opacity-80 disabled:opacity-50`}
+                      >
+                        {statusKey === 'applied' && <Clock className="w-3.5 h-3.5" />}
+                        {statusKey === 'awaiting_payment' && <Wallet className="w-3.5 h-3.5" />}
+                        {statusKey === 'paid' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        {updatingId === app.id ? '処理中...' : status.label}
+                        <ChevronDown className="w-3 h-3" />
+                      </button>
+                      {openMenuId === app.id && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
+                          <div className="absolute right-0 mt-1 z-20 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden min-w-[180px]">
+                            {(['applied', 'awaiting_payment', 'paid'] as StatusKey[]).map(s => (
+                              <button key={s}
+                                onClick={() => changeStatus(app, s)}
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 flex items-center gap-2 ${
+                                  statusKey === s ? 'bg-slate-50 font-bold' : ''
+                                }`}>
+                                {s === 'applied' && <Clock className="w-3.5 h-3.5 text-blue-600" />}
+                                {s === 'awaiting_payment' && <Wallet className="w-3.5 h-3.5 text-amber-600" />}
+                                {s === 'paid' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+                                {STATUS_LABELS[s].label}
+                                {statusKey === s && <Check className="w-3.5 h-3.5 ml-auto text-slate-400" />}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                    {!accountIssued && app.payment_status !== 'paid' && (
+                      <button onClick={() => handleDelete(app)}
+                        title="削除"
+                        className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg">
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     )}
                   </div>
                 </div>
-              )
-            })}
-            {filtered.length === 0 && (
-              <div className="bg-white rounded-xl p-8 text-center text-gray-400">申込はありません</div>
-            )}
-          </div>
-        </>
-      )}
+
+                {/* 2行目: 連絡先情報を1行に圧縮 */}
+                <div className="text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                  <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{app.email}</span>
+                  {app.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{app.phone}</span>}
+                  {app.birthdate && <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3" />{app.birthdate}</span>}
+                  {(app.postal_code || app.address) && (
+                    <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{app.postal_code && `〒${app.postal_code} `}{app.address}</span>
+                  )}
+                  <span className="text-gray-400">申込: {formatDateTime(app.created_at)}</span>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
     </div>
   )
 }

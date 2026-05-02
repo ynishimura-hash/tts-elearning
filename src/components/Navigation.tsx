@@ -48,7 +48,6 @@ const navItems: Record<NavMode, NavItem[]> = {
     { href: '/admin/courses', label: 'コース管理', icon: BookOpen },
     { href: '/admin/announcements', label: 'お知らせ管理', icon: Bell },
     { href: '/admin/study-sessions', label: '勉強会管理', icon: CalendarDays },
-    { href: '/admin/payments', label: '入金管理', icon: Wallet, badgeKey: 'paymentsPending' },
     { href: '/admin/peak-bottom', label: 'ピークボトム申請', icon: Wrench, badgeKey: 'peakBottomPending' },
     { href: '/admin/questions', label: '質問管理', icon: MessageSquare },
     { href: '/admin/consultations', label: '個別相談', icon: Users },
@@ -83,16 +82,16 @@ export function Navigation({ mode }: { mode: NavMode }) {
     let cancelled = false
 
     async function fetchBadges() {
-      const [pb, ap, py] = await Promise.all([
+      const [pb, unpaid] = await Promise.all([
         supabase.from('peak_bottom_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-        supabase.from('applications').select('id', { count: 'exact', head: true }).eq('course_type', 'online').eq('payment_status', 'unpaid'),
+        // 入金未完了 = 申し込み済み or 入金待ち
+        supabase.from('applications').select('id', { count: 'exact', head: true }).eq('payment_status', 'unpaid'),
       ])
       if (cancelled) return
       setBadges({
         peakBottomPending: pb.count || 0,
-        applicationsPending: ap.count || 0,
-        paymentsPending: py.count || 0,
+        applicationsPending: unpaid.count || 0,
+        paymentsPending: 0,
       })
     }
 
