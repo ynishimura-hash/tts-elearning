@@ -22,7 +22,11 @@ async function notifyByEmail({ fullName, email, tradingviewUsername, isUpdate }:
   const pass = process.env.GMAIL_APP_PASSWORD
   if (!user || !pass) return
 
-  const subject = `【TTS申請通知】反対線ピークボトムツール${isUpdate ? '（再申請）' : ''} - ${fullName}`
+  // Gmailの重複スレッド集約を防ぐため件名にタイムスタンプを混ぜる
+  const stamp = new Date().toLocaleString('ja-JP', {
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  })
+  const subject = `【TTS申請通知】反対線ピークボトムツール${isUpdate ? '（再申請）' : ''} - ${fullName} (${stamp})`
   const text =
     `反対線ピークボトムツールの${isUpdate ? '再' : ''}利用申請がありました。\n\n` +
     `氏名: ${fullName}\n` +
@@ -99,7 +103,8 @@ export async function POST(request: NextRequest) {
 
   const isUpdate = !!existing
   if (existing) {
-    const { error } = await supabase
+    // RLS 経由で更新 → 0 行で完了することを防ぐため select で確認
+    const { data: updated, error } = await supabase
       .from('peak_bottom_applications')
       .update({
         tradingview_username: username,
@@ -107,8 +112,15 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', existing.id)
+      .select('id')
     if (error) {
       return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+    }
+    if (!updated || updated.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '更新に失敗しました（権限不足の可能性）' },
+        { status: 500 }
+      )
     }
   } else {
     const { error } = await supabase.from('peak_bottom_applications').insert({
