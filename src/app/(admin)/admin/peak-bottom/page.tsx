@@ -43,14 +43,14 @@ export default function AdminPeakBottomPage() {
   }
 
   async function handleComplete(app: Application) {
-    if (!confirm(`${app.user?.full_name || '不明'} の申請を「登録完了」にしますか？\n（LINE紐付け済みの方には通知が飛びます）`)) return
+    if (!confirm(`${app.user?.full_name || '不明'} の申請を「登録完了」にしますか？\n申請者へのご連絡は手動で行ってください。`)) return
     setCompleting(app.id)
     try {
       const res = await fetch(`/api/admin/peak-bottom/${app.id}/complete`, { method: 'POST' })
       const data = await res.json()
       if (data.success) {
         toast.success('登録完了に変更しました', {
-          description: data.line_sent ? 'LINEに通知を送信しました' : 'LINE未紐付けのため通知は送られていません',
+          description: '申請者への連絡は手動でお願いします',
         })
         await fetchData()
       } else {

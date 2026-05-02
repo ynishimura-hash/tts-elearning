@@ -1,33 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createServiceClient } from '@supabase/supabase-js'
+import nodemailer from 'nodemailer'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 
 interface ApplyBody {
   tradingview_username: string
 }
 
-async function notifyAdminLineGroup(message: string): Promise<void> {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!token || !supabaseUrl || !serviceKey) return
+interface NotifyArgs {
+  fullName: string
+  email: string
+  tradingviewUsername: string
+  isUpdate: boolean
+}
 
-  const sb = createServiceClient(supabaseUrl, serviceKey)
-  const { data: target } = await sb
-    .from('line_groups')
-    .select('group_id')
-    .eq('is_peak_bottom_target', true)
-    .maybeSingle()
-  if (!target?.group_id) return
+/**
+ * GAS 連携用に Gmail SMTP 経由で通知メールを送信
+ * 件名に「【TTS申請通知】」を含めることで GAS 側で振り分け可能
+ */
+async function notifyByEmail({ fullName, email, tradingviewUsername, isUpdate }: NotifyArgs): Promise<void> {
+  const user = process.env.GMAIL_USER
+  const pass = process.env.GMAIL_APP_PASSWORD
+  if (!user || !pass) return
 
-  await fetch('https://api.line.me/v2/bot/message/push', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({
-      to: target.group_id,
-      messages: [{ type: 'text', text: message }],
-    }),
-  }).catch(() => {})
+  const subject = `【TTS申請通知】反対線ピークボトムツール${isUpdate ? '（再申請）' : ''} - ${fullName}`
+  const text =
+    `反対線ピークボトムツールの${isUpdate ? '再' : ''}利用申請がありました。\n\n` +
+    `氏名: ${fullName}\n` +
+    `メール: ${email}\n` +
+    `TradingViewアカウント: ${tradingviewUsername}\n\n` +
+    `管理画面で確認:\n` +
+    `https://tts-e.vercel.app/admin/peak-bottom\n\n` +
+    `――――――――\n` +
+    `TTS e-ラーニング システム`
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: { user, pass },
+    })
+    await transporter.sendMail({
+      from: `"TTS システム通知" <${user}>`,
+      to: user, // 自分宛に送信（GAS が同じ受信箱を読む）
+      subject,
+      text,
+    })
+  } catch (err) {
+    // 通知失敗しても申請自体は成功させる
+    console.error('peak-bottom notify email failed:', err)
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -99,14 +121,13 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // 管理者LINEグループへ通知
-  await notifyAdminLineGroup(
-    `【反対線ピークボトム ${isUpdate ? '再' : ''}申請】\n\n` +
-    `氏名: ${profile.full_name}\n` +
-    `メール: ${profile.email}\n` +
-    `TradingView: ${username}\n\n` +
-    `管理画面: https://tts-e.vercel.app/admin/peak-bottom`
-  )
+  // GAS 連携用通知メール送信（失敗しても申請成功扱い）
+  await notifyByEmail({
+    fullName: profile.full_name,
+    email: profile.email,
+    tradingviewUsername: username,
+    isUpdate,
+  })
 
   return NextResponse.json({ success: true, action: isUpdate ? 'updated' : 'created' })
 }
@@ -126,7 +147,6 @@ export async function GET() {
     return NextResponse.json({ success: false, error: 'ユーザー情報が見つかりません' }, { status: 404 })
   }
 
-  // 最新の申請（pending 優先 → 直近の completed）
   const { data, error } = await supabase
     .from('peak_bottom_applications')
     .select('id, tradingview_username, status, applied_at, completed_at')
