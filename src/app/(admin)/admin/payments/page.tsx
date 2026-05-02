@@ -34,7 +34,6 @@ export default function PaymentsPage() {
   const [filter, setFilter] = useState<Filter>('unpaid')
   const [confirming, setConfirming] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState<string | null>(null)
   const [urlCopied, setUrlCopied] = useState(false)
 
   async function handleDelete(app: App) {
@@ -179,6 +178,27 @@ export default function PaymentsPage() {
         ))}
       </div>
 
+      {/* ワークフロー説明（ヘッダー側に1度だけ） */}
+      <details className="bg-amber-50 border border-amber-200 rounded-xl text-sm">
+        <summary className="cursor-pointer px-4 py-3 font-bold text-amber-900 select-none">
+          ⚙ 「入金完了」ボタンを押すと自動実行される処理
+        </summary>
+        <div className="px-4 pb-3 text-amber-800">
+          <ol className="list-decimal list-inside space-y-0.5">
+            <li>Driveフォルダ複製（テンプレ → <span className="font-mono">{'{customer_id}_{氏名}様'}</span>）</li>
+            <li>e-ラーニングアカウント作成（is_online=true）+ 仮パスワード発行</li>
+            <li>ウェルカムメール送信（ログイン情報・LINE案内・Driveフォルダ含む）</li>
+          </ol>
+          <a
+            href="https://drive.google.com/drive/folders/1cNSZoO-9ZxpSbmDhfUSROCsJdHGuSn2u"
+            target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 mt-2 text-amber-700 hover:underline"
+          >
+            親フォルダを開く <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+      </details>
+
       {loading ? (
         <div className="text-center py-12 text-gray-400">読み込み中...</div>
       ) : filtered.length === 0 ? (
@@ -187,121 +207,91 @@ export default function PaymentsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map((app) => {
-            const isOpen = expanded === app.id
-            return (
-              <div key={app.id}
-                className={`bg-white rounded-xl shadow-sm border overflow-hidden ${
-                  app.payment_status === 'unpaid' ? 'border-amber-200' : 'border-slate-100'
-                }`}>
-                <div className="p-4 md:p-5">
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <h3 className="font-bold text-gray-800">{app.full_name}</h3>
-                        {app.payment_status === 'unpaid' && (
-                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded inline-flex items-center gap-1">
-                            <Clock className="w-3 h-3" />入金待ち
-                          </span>
-                        )}
-                        {app.payment_status === 'paid' && (
-                          <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded inline-flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3" />入金完了
-                          </span>
-                        )}
-                        {!app.auto_reply_sent && (
-                          <span className="text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded inline-flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3" />自動返信未送信
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-500 space-y-0.5">
-                        <p className="flex items-center gap-1"><Mail className="w-3 h-3" />{app.email}</p>
-                        {app.phone && <p className="flex items-center gap-1"><Phone className="w-3 h-3" />{app.phone}</p>}
-                        <p>申込: {new Date(app.created_at).toLocaleString('ja-JP')}</p>
-                        {app.payment_confirmed_at && (
-                          <p className="text-emerald-600">入金完了: {new Date(app.payment_confirmed_at).toLocaleString('ja-JP')}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => setExpanded(isOpen ? null : app.id)}
-                        className="px-3 py-1.5 text-xs text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200"
-                      >
-                        {isOpen ? '閉じる' : '詳細'}
-                      </button>
+          {filtered.map((app) => (
+            <div key={app.id}
+              className={`bg-white rounded-xl shadow-sm border overflow-hidden ${
+                app.payment_status === 'unpaid' ? 'border-amber-200' : 'border-slate-100'
+              }`}>
+              <div className="p-4 md:p-5">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    {/* 氏名 + ステータス */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-bold text-gray-800 text-base">{app.full_name}</h3>
                       {app.payment_status === 'unpaid' && (
-                        <>
-                          <button
-                            onClick={() => handleConfirm(app)}
-                            disabled={confirming === app.id}
-                            className="inline-flex items-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
-                          >
-                            <CheckCircle2 className="w-4 h-4" />
-                            {confirming === app.id ? '処理中...' : '入金完了'}
-                          </button>
-                          <button
-                            onClick={() => handleDelete(app)}
-                            disabled={deleting === app.id}
-                            title="削除"
-                            className="inline-flex items-center gap-1 p-2 text-rose-500 hover:bg-rose-50 rounded-lg disabled:opacity-50"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </>
+                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                          <Clock className="w-3 h-3" />入金待ち
+                        </span>
                       )}
-                    </div>
-                  </div>
-                </div>
-
-                {isOpen && (
-                  <div className="border-t bg-slate-50/60 p-4 md:p-5 text-sm space-y-2">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5">
-                      {app.birthdate && (
-                        <div className="flex gap-2"><CalendarDays className="w-4 h-4 text-slate-400 mt-0.5" />
-                          <div><span className="text-slate-500 text-xs">生年月日</span><p className="text-slate-700">{app.birthdate}</p></div>
-                        </div>
+                      {app.payment_status === 'paid' && (
+                        <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />入金完了
+                        </span>
                       )}
-                      {app.postal_code && (
-                        <div className="flex gap-2"><MapPin className="w-4 h-4 text-slate-400 mt-0.5" />
-                          <div>
-                            <span className="text-slate-500 text-xs">住所</span>
-                            <p className="text-slate-700">〒{app.postal_code}<br />{app.address}</p>
-                          </div>
-                        </div>
-                      )}
-                      {app.referral_source && (
-                        <div className="md:col-span-2">
-                          <span className="text-slate-500 text-xs">受講のきっかけ</span>
-                          <p className="text-slate-700">{app.referral_source}{app.referral_detail && `（${app.referral_detail}）`}</p>
-                        </div>
+                      {!app.auto_reply_sent && (
+                        <span className="text-xs bg-rose-100 text-rose-700 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" />自動返信未送信
+                        </span>
                       )}
                     </div>
 
-                    {app.payment_status === 'unpaid' && (
-                      <div className="mt-3 pt-3 border-t bg-amber-50 -mx-4 -mb-4 md:-mx-5 md:-mb-5 px-4 md:px-5 py-3 text-xs text-amber-900">
-                        <p className="font-bold mb-1">⚙ 入金完了ボタンを押すと自動実行</p>
-                        <ol className="list-decimal list-inside space-y-0.5 text-amber-800">
-                          <li>Driveフォルダ複製（テンプレ → <span className="font-mono">{`{次番}_${app.full_name}様`}</span>）</li>
-                          <li>e-ラーニングアカウント作成（is_online=true）</li>
-                          <li>仮パスワード発行</li>
-                          <li>ウェルカムメール送信</li>
-                        </ol>
-                        <a
-                          href="https://drive.google.com/drive/folders/1cNSZoO-9ZxpSbmDhfUSROCsJdHGuSn2u"
-                          target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 mt-2 text-amber-700 hover:underline"
-                        >
-                          親フォルダを開く <ExternalLink className="w-3 h-3" />
-                        </a>
+                    {/* 連絡先 */}
+                    <div className="text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
+                      <span className="flex items-center gap-1"><Mail className="w-3 h-3 text-gray-400" />{app.email}</span>
+                      {app.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3 text-gray-400" />{app.phone}</span>}
+                      {app.birthdate && <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3 text-gray-400" />{app.birthdate}</span>}
+                    </div>
+
+                    {/* 住所 */}
+                    {(app.postal_code || app.address) && (
+                      <div className="text-xs text-gray-600 flex items-start gap-1">
+                        <MapPin className="w-3 h-3 text-gray-400 mt-0.5 flex-shrink-0" />
+                        <span>{app.postal_code && `〒${app.postal_code} `}{app.address}</span>
                       </div>
                     )}
+
+                    {/* きっかけ */}
+                    {app.referral_source && (
+                      <div className="text-xs text-gray-500">
+                        きっかけ: <span className="text-gray-700">{app.referral_source}{app.referral_detail && `（${app.referral_detail}）`}</span>
+                      </div>
+                    )}
+
+                    {/* 日時 */}
+                    <div className="text-xs text-gray-400 pt-1 border-t border-gray-100">
+                      申込: {new Date(app.created_at).toLocaleString('ja-JP')}
+                      {app.payment_confirmed_at && (
+                        <span className="text-emerald-600 ml-3">入金完了: {new Date(app.payment_confirmed_at).toLocaleString('ja-JP')}</span>
+                      )}
+                    </div>
                   </div>
-                )}
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {app.payment_status === 'unpaid' && (
+                      <>
+                        <button
+                          onClick={() => handleConfirm(app)}
+                          disabled={confirming === app.id}
+                          className="inline-flex items-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          {confirming === app.id ? '処理中...' : '入金完了'}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(app)}
+                          disabled={deleting === app.id}
+                          title="削除"
+                          className="inline-flex items-center gap-1 p-2 text-rose-500 hover:bg-rose-50 rounded-lg disabled:opacity-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       )}
     </div>
