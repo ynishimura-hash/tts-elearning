@@ -169,6 +169,16 @@ export interface Application {
   auto_reply_sent: boolean
   processed_at: string | null
   created_at: string
+  // オンライン申込フォーム拡張
+  birthdate: string | null
+  postal_code: string | null
+  address: string | null
+  referral_source: string | null
+  referral_detail: string | null
+  payment_status: 'unpaid' | 'paid' | 'cancelled'
+  payment_confirmed_at: string | null
+  payment_confirmed_by: string | null
+  user_id: string | null
 }
 
 export interface TradeRule {

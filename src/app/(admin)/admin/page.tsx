@@ -3,13 +3,20 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Users, BookOpen, CalendarDays, FileText, Bell, UserPlus, ChevronRight, HelpCircle, Wrench } from 'lucide-react'
+import { Users, BookOpen, CalendarDays, FileText, Bell, UserPlus, ChevronRight, HelpCircle, Wrench, Wallet } from 'lucide-react'
 
 type PendingPeakBottom = {
   id: string
   tradingview_username: string
   applied_at: string
   user: { full_name: string; email: string } | null
+}
+
+type PendingPayment = {
+  id: string
+  full_name: string
+  email: string
+  created_at: string
 }
 
 export default function AdminDashboard() {
@@ -27,16 +34,18 @@ export default function AdminDashboard() {
     totalAnnouncements: 0,
     totalFaqs: 0,
     pendingPeakBottom: 0,
+    pendingPayments: 0,
   })
   const [recentApps, setRecentApps] = useState<{ id: string; full_name: string; course_type: string; created_at: string }[]>([])
   const [pendingPeakBottomList, setPendingPeakBottomList] = useState<PendingPeakBottom[]>([])
+  const [pendingPaymentsList, setPendingPaymentsList] = useState<PendingPayment[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const supabase = createClient()
 
     async function fetchStats() {
-      const [users, courses, contents, apps, sessions, announcements, faqs, recentApplications, peakBottomCount, peakBottomList] = await Promise.all([
+      const [users, courses, contents, apps, sessions, announcements, faqs, recentApplications, peakBottomCount, peakBottomList, paymentCount, paymentList] = await Promise.all([
         supabase.from('users').select('is_online, is_free_user, is_admin'),
         supabase.from('courses').select('id, is_online'),
         supabase.from('contents').select('id', { count: 'exact', head: true }),
@@ -51,6 +60,9 @@ export default function AdminDashboard() {
         supabase.from('peak_bottom_applications')
           .select('id, tradingview_username, applied_at, user:users!peak_bottom_applications_user_id_fkey(full_name, email)')
           .eq('status', 'pending').order('applied_at', { ascending: false }).limit(5),
+        supabase.from('applications').select('id', { count: 'exact', head: true }).eq('course_type', 'online').eq('payment_status', 'unpaid'),
+        supabase.from('applications').select('id, full_name, email, created_at')
+          .eq('course_type', 'online').eq('payment_status', 'unpaid').order('created_at', { ascending: false }).limit(5),
       ])
 
       const userData = users.data || []
@@ -71,12 +83,14 @@ export default function AdminDashboard() {
         totalAnnouncements: announcements.count || 0,
         totalFaqs: faqs.count || 0,
         pendingPeakBottom: peakBottomCount.count || 0,
+        pendingPayments: paymentCount.count || 0,
       })
 
       if (recentApplications.data) setRecentApps(recentApplications.data)
       if (peakBottomList.data) {
         setPendingPeakBottomList(peakBottomList.data as unknown as PendingPeakBottom[])
       }
+      if (paymentList.data) setPendingPaymentsList(paymentList.data as PendingPayment[])
       setLoading(false)
     }
 
@@ -93,6 +107,7 @@ export default function AdminDashboard() {
     { label: '未処理の申込', value: stats.pendingApplications, icon: UserPlus, color: stats.pendingApplications > 0 ? 'bg-red-100 text-red-600 ring-2 ring-red-200' : 'bg-red-100 text-red-600', href: '/admin/applications' },
     { label: '今後の勉強会', value: stats.upcomingSessions, icon: CalendarDays, color: 'bg-teal-100 text-teal-600', href: '/admin/study-sessions' },
     { label: 'ピークボトム申請中', value: stats.pendingPeakBottom, icon: Wrench, color: stats.pendingPeakBottom > 0 ? 'bg-amber-100 text-amber-700 ring-2 ring-amber-300' : 'bg-amber-100 text-amber-700', href: '/admin/peak-bottom' },
+    { label: '入金待ち', value: stats.pendingPayments, icon: Wallet, color: stats.pendingPayments > 0 ? 'bg-orange-100 text-orange-700 ring-2 ring-orange-300' : 'bg-orange-100 text-orange-700', href: '/admin/payments' },
   ]
 
   if (loading) {
@@ -160,6 +175,38 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <p className="text-sm text-gray-400 text-center py-4">未処理の申込はありません</p>
+          )}
+        </div>
+
+        {/* 入金待ち */}
+        <div className={`bg-white rounded-xl p-5 shadow-sm ${stats.pendingPayments > 0 ? 'ring-2 ring-orange-200' : ''}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-orange-600" />
+              入金待ち
+              {stats.pendingPayments > 0 && (
+                <span className="px-2 py-0.5 rounded text-xs bg-orange-500 text-white">{stats.pendingPayments}</span>
+              )}
+            </h2>
+            <Link href="/admin/payments" className="text-sm text-[#384a8f] hover:underline">
+              すべて見る
+            </Link>
+          </div>
+          {pendingPaymentsList.length > 0 ? (
+            <div className="space-y-3">
+              {pendingPaymentsList.map((p) => (
+                <div key={p.id} className="flex items-center justify-between p-3 bg-orange-50/60 rounded-lg">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-800 text-sm truncate">{p.full_name}</p>
+                    <p className="text-xs text-gray-500 truncate">{p.email}</p>
+                    <p className="text-xs text-gray-400">{new Date(p.created_at).toLocaleString('ja-JP')}</p>
+                  </div>
+                  <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded flex-shrink-0">入金待ち</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 text-center py-4">入金待ちはありません</p>
           )}
         </div>
 

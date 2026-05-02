@@ -28,7 +28,7 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   // 公開ページのパス
-  const publicPaths = ['/login', '/apply', '/api/', '/expired', '/blog', '/unsubscribe']
+  const publicPaths = ['/login', '/apply', '/apply/online', '/api/', '/expired', '/blog', '/unsubscribe']
   const isPublicPath = publicPaths.some(path => request.nextUrl.pathname.startsWith(path))
 
   if (!user && !isPublicPath) {
