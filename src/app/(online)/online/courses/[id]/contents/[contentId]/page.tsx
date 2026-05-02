@@ -10,7 +10,7 @@ import { QuizModal } from '@/components/QuizModal'
 import { getYouTubeId } from '@/lib/utils'
 import {
   ArrowLeft, ArrowRight, CheckCircle2, FileText,
-  ExternalLink, AlertCircle, Play, PlayCircle, Menu, X, Clock
+  ExternalLink, AlertCircle, Play, PlayCircle, Menu, X, Clock, Wrench
 } from 'lucide-react'
 import type { Content } from '@/types/database'
 
@@ -143,19 +143,30 @@ export default function OnlineContentViewPage() {
         )}
 
         <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6 pb-24">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
             <h2 className="text-xl font-bold text-gray-800">{content.name}</h2>
-            {!progress.video && content.youtube_url && (
-              <button onClick={() => updateProgress('video_completed')}
-                className="flex-shrink-0 px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75] transition-colors">
-                視聴完了
-              </button>
-            )}
-            {progress.video && !progress.completed && (
-              <span className="flex-shrink-0 text-sm text-green-600 flex items-center gap-1">
-                <CheckCircle2 className="w-4 h-4" /> 視聴完了
-              </span>
-            )}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* ピークボトム申請ボタン（コンテンツ名にピークボトムが含まれる場合） */}
+              {content.name.includes('ピークボトム') && (
+                <Link
+                  href="/online/peak-bottom/apply"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors"
+                >
+                  <Wrench className="w-4 h-4" /> ツール申請
+                </Link>
+              )}
+              {!progress.video && content.youtube_url && (
+                <button onClick={() => updateProgress('video_completed')}
+                  className="px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75] transition-colors">
+                  視聴完了
+                </button>
+              )}
+              {progress.video && !progress.completed && (
+                <span className="text-sm text-green-600 flex items-center gap-1">
+                  <CheckCircle2 className="w-4 h-4" /> 視聴完了
+                </span>
+              )}
+            </div>
           </div>
 
           {content.notes && (
