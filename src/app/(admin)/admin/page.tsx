@@ -3,7 +3,10 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { Users, BookOpen, CalendarDays, FileText, Bell, UserPlus, ChevronRight, HelpCircle, Wrench, Wallet } from 'lucide-react'
+import { Users, BookOpen, CalendarDays, FileText, Bell, UserPlus, ChevronRight, HelpCircle, Wrench, Wallet, Link2, Copy, Check, ExternalLink } from 'lucide-react'
+import { toast } from 'sonner'
+
+const ONLINE_APPLY_URL = 'https://tts-e.vercel.app/apply/online'
 
 type PendingPeakBottom = {
   id: string
@@ -40,6 +43,14 @@ export default function AdminDashboard() {
   const [pendingPeakBottomList, setPendingPeakBottomList] = useState<PendingPeakBottom[]>([])
   const [pendingPaymentsList, setPendingPaymentsList] = useState<PendingPayment[]>([])
   const [loading, setLoading] = useState(true)
+  const [urlCopied, setUrlCopied] = useState(false)
+
+  async function copyApplyUrl() {
+    await navigator.clipboard.writeText(ONLINE_APPLY_URL)
+    setUrlCopied(true)
+    toast.success('申込フォームURLをコピーしました')
+    setTimeout(() => setUrlCopied(false), 2000)
+  }
 
   useEffect(() => {
     const supabase = createClient()
@@ -125,6 +136,28 @@ export default function AdminDashboard() {
         <span className="text-sm text-gray-500">
           {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}
         </span>
+      </div>
+
+      {/* オンライン申込フォームURL */}
+      <div className="bg-gradient-to-r from-[#384a8f]/5 to-[#e39f3c]/5 border border-[#384a8f]/20 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Link2 className="w-4 h-4 text-[#384a8f]" />
+          <p className="text-sm font-medium text-gray-700">TTSオンライン 申込フォームURL（受講希望者にお渡しください）</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <code className="flex-1 min-w-0 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-mono text-slate-700 truncate">
+            {ONLINE_APPLY_URL}
+          </code>
+          <button onClick={copyApplyUrl}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75] transition-colors">
+            {urlCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {urlCopied ? 'コピー済み' : 'コピー'}
+          </button>
+          <a href={ONLINE_APPLY_URL} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50">
+            <ExternalLink className="w-4 h-4" /> 開く
+          </a>
+        </div>
       </div>
 
       {/* 統計カード */}

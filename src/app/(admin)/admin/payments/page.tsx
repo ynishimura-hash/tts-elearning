@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
   Wallet, RefreshCw, Mail, Phone, MapPin, CalendarDays,
-  CheckCircle2, Clock, AlertCircle, ExternalLink,
+  CheckCircle2, Clock, AlertCircle, ExternalLink, Copy, Check, Link2, Trash2,
 } from 'lucide-react'
+
+const APPLY_URL = 'https://tts-e.vercel.app/apply/online'
 
 type App = {
   id: string
@@ -31,7 +33,38 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<Filter>('unpaid')
   const [confirming, setConfirming] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [urlCopied, setUrlCopied] = useState(false)
+
+  async function handleDelete(app: App) {
+    if (!confirm(
+      `${app.full_name} さんの申込を削除します。\n\n` +
+      `※ メールアドレス: ${app.email}\n` +
+      `この操作は取り消せません。実行しますか？`
+    )) return
+    setDeleting(app.id)
+    try {
+      const res = await fetch(`/api/admin/applications/${app.id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        toast.success('削除しました')
+        fetchData()
+      } else {
+        toast.error(data.error || '削除に失敗しました')
+      }
+    } catch {
+      toast.error('通信エラー')
+    }
+    setDeleting(null)
+  }
+
+  async function copyApplyUrl() {
+    await navigator.clipboard.writeText(APPLY_URL)
+    setUrlCopied(true)
+    toast.success('申込フォームURLをコピーしました')
+    setTimeout(() => setUrlCopied(false), 2000)
+  }
 
   useEffect(() => { fetchData() }, [])
 
@@ -106,6 +139,28 @@ export default function PaymentsPage() {
         </button>
       </div>
 
+      {/* 申込フォームURL */}
+      <div className="bg-gradient-to-r from-[#384a8f]/5 to-[#e39f3c]/5 border border-[#384a8f]/20 rounded-xl p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Link2 className="w-4 h-4 text-[#384a8f]" />
+          <p className="text-sm font-medium text-gray-700">受講希望者にお渡しする申込フォームURL</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <code className="flex-1 min-w-0 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-mono text-slate-700 truncate">
+            {APPLY_URL}
+          </code>
+          <button onClick={copyApplyUrl}
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75] transition-colors">
+            {urlCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {urlCopied ? 'コピー済み' : 'コピー'}
+          </button>
+          <a href={APPLY_URL} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50">
+            <ExternalLink className="w-4 h-4" /> 開く
+          </a>
+        </div>
+      </div>
+
       <div className="flex gap-2 flex-wrap">
         {[
           { key: 'unpaid' as Filter, label: '入金待ち', count: counts.unpaid, color: 'bg-amber-500' },
@@ -177,14 +232,24 @@ export default function PaymentsPage() {
                         {isOpen ? '閉じる' : '詳細'}
                       </button>
                       {app.payment_status === 'unpaid' && (
-                        <button
-                          onClick={() => handleConfirm(app)}
-                          disabled={confirming === app.id}
-                          className="inline-flex items-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          {confirming === app.id ? '処理中...' : '入金完了'}
-                        </button>
+                        <>
+                          <button
+                            onClick={() => handleConfirm(app)}
+                            disabled={confirming === app.id}
+                            className="inline-flex items-center gap-1 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            {confirming === app.id ? '処理中...' : '入金完了'}
+                          </button>
+                          <button
+                            onClick={() => handleDelete(app)}
+                            disabled={deleting === app.id}
+                            title="削除"
+                            className="inline-flex items-center gap-1 p-2 text-rose-500 hover:bg-rose-50 rounded-lg disabled:opacity-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
