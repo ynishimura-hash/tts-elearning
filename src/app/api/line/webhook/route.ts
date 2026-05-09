@@ -80,12 +80,30 @@ export async function POST(request: NextRequest) {
       { onConflict: 'group_id', ignoreDuplicates: false }
     )
 
+    const text = event.message?.text || ''
+
+    // 「申し込み」「申込」テキストで申込URLを返信
+    if (
+      event.type === 'message' &&
+      event.message?.type === 'text' &&
+      event.replyToken &&
+      /^(申し?込み?|apply)$/i.test(text.trim())
+    ) {
+      const applyUrl = 'https://tts-e.vercel.app/apply/online'
+      await replyToLine(
+        event.replyToken,
+        `TTSオンライン有料会員のお申込みはこちらからどうぞ。\n\n${applyUrl}\n\n` +
+        `フォームに必要事項をご入力いただいた後、PayPalでのお支払い案内メールをお送りします。`
+      )
+      continue
+    }
+
     // 「ID教えて」みたいなテキストでIDを返信
     if (
       event.type === 'message' &&
       event.message?.type === 'text' &&
       event.replyToken &&
-      /(\bID\b|教えて|id)/i.test(event.message.text || '')
+      /(\bID\b|教えて|id)/i.test(text)
     ) {
       await replyToLine(
         event.replyToken,
