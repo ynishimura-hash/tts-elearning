@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'node:crypto'
+import { pushLineMessage } from '@/lib/line-push'
 
 interface LineEvent {
   type: string
@@ -83,11 +84,12 @@ export async function POST(request: NextRequest) {
     const text = event.message?.text || ''
     const lineUserId = event.source.userId
 
-    // 「申し込み」「申込」テキストで token 発行 + 専用URLを返信
+    // 「申し込み」「申込」テキストで token 発行 + 専用URLを Push 送信
+    // ※ LINE OA の「一律応答」が reply_token を先に消費する場合があるため、
+    //   reply ではなく Push API を使う（reply_tokenに依存しない）
     if (
       event.type === 'message' &&
       event.message?.type === 'text' &&
-      event.replyToken &&
       lineUserId &&
       /^(申し?込み?|apply)$/i.test(text.trim())
     ) {
@@ -116,15 +118,15 @@ export async function POST(request: NextRequest) {
           .select('token')
           .single()
         if (error || !created) {
-          await replyToLine(event.replyToken, '申込URLの発行に失敗しました。お手数ですが事務局までご連絡ください。')
+          await pushLineMessage(lineUserId, '申込URLの発行に失敗しました。お手数ですが事務局までご連絡ください。')
           continue
         }
         token = created.token
       }
 
       const applyUrl = `https://tts-e.vercel.app/apply/online?token=${token}`
-      await replyToLine(
-        event.replyToken,
+      await pushLineMessage(
+        lineUserId,
         `TTSオンライン有料会員のお申込みは下記URLからどうぞ。\n\n` +
         `${applyUrl}\n\n` +
         `※ このURLは7日間有効です。\n` +
