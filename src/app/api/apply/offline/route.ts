@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     referral_source: body.referral_source,
     referral_detail: body.referral_detail?.trim() || null,
     course_type: 'offline',
-    status: 'pending',
+    status: 'approved',
     payment_status: 'unpaid',
     auto_reply_sent: false,
   }).select('id').single()

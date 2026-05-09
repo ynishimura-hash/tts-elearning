@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer'
 import { createClient as createServiceClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { randomInt } from 'node:crypto'
+import { pushLineMessage } from '@/lib/line-push'
 
 type AdminClient = SupabaseClient
 
@@ -279,10 +280,31 @@ export async function POST(
     processed_at: new Date().toISOString(),
   }).eq('id', id)
 
+  // 6. users.last_payment_* も更新（手動入金完了でも記録）
+  await admin.from('users').update({
+    last_payment_at: new Date().toISOString(),
+  }).eq('id', userId)
+
+  // 7. line_user_id 紐付けがあれば本人にLINE通知
+  let linePushed = false
+  if (app.line_user_id) {
+    const message =
+      `${app.full_name}様\n\n` +
+      `お支払いを確認いたしました。\n` +
+      `e-ラーニングのアカウントを発行しましたので、\n` +
+      `ご入力いただいたメールアドレス宛にログイン情報をお送りしています。\n\n` +
+      `ご確認のほど、よろしくお願いいたします。\n\n` +
+      `▼ ログインURL\n` +
+      `https://tts-e.vercel.app/login\n\n` +
+      `TTSオンライン運営事務局`
+    linePushed = await pushLineMessage(app.line_user_id, message)
+  }
+
   return NextResponse.json({
     success: true,
     drive_ok: drive.ok,
     drive_error: drive.error,
     mail_sent: mailSent,
+    line_pushed: linePushed,
   })
 }

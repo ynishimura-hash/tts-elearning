@@ -130,7 +130,8 @@ export async function POST(request: NextRequest) {
     referral_source: body.referral_source,
     referral_detail: body.referral_detail?.trim() || null,
     course_type: 'online',
-    status: 'pending',
+    // PayPalリンクを自動返信メールで送信済みなので、承認済み扱い
+    status: 'approved',
     payment_status: 'unpaid',
     auto_reply_sent: false,
     line_user_id: lineUserId,

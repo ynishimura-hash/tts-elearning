@@ -76,7 +76,7 @@ export default function AdminApplicationsPage() {
         if (data.success) {
           toast.success('「入金済み」に変更しました', {
             description: app.course_type === 'online'
-              ? `${data.drive_ok ? '✓ Drive ' : '⚠ Drive '}${data.mail_sent ? '✓ メール' : '⚠ メール'}`
+              ? `${data.drive_ok ? '✓ Drive ' : '⚠ Drive '}${data.mail_sent ? '✓ メール ' : '⚠ メール '}${data.line_pushed ? '✓ LINE通知' : ''}`
               : undefined,
           })
           fetchData()
