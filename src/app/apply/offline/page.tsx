@@ -126,7 +126,8 @@ export default function OfflineApplyPage() {
                 <input type="text" required value={form.furigana}
                   onChange={(e) => setForm({ ...form, furigana: e.target.value })}
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none"
-                  placeholder="やまだ たろう" />
+                  placeholder="やまだ たろう / ヤマダ タロウ" />
+                <p className="text-xs text-gray-500 mt-1">ひらがな または カタカナでご入力ください</p>
               </div>
 
               <div>
