@@ -31,10 +31,12 @@ GAS は **`kudo@creatte.jp` のアカウント**で運用されています。Gm
 // ===========================================
 // 設定項目
 // ===========================================
-// LINE Messaging API のチャネルアクセストークン（TTSオンライン公式LINE）
-const LINE_TOKEN = '<LINE_CHANNEL_ACCESS_TOKEN>';
+// ⚠ TTS公式LINE（事務局/旧）のチャネルアクセストークン
+// ※ TTSオンライン公式LINE（受講生用）ではない
+// 事務局グループに送信するBOTのトークン
+const LINE_TOKEN = '<TTS公式LINE_CHANNEL_ACCESS_TOKEN>';
 
-// 通知先のLINEグループID
+// 通知先のLINEグループID（事務局メンバーが入っているグループ）
 const TARGET_ID = '<TTS事務局グループのGroupID>';
 
 // TTS PayPal連携APIエンドポイント
@@ -120,6 +122,8 @@ function checkTtsPayPalAndNotify() {
 
 
 // PayPal メール本文から必要情報を抽出
+// NOTE: getPlainBody() はHTMLの <b>取引ID:</b> を *取引ID:* に変換するため
+//       アスタリスク付きのパターンにも対応する
 function parsePayPalEmail(body, msgDate) {
   const result = {
     customer_email: null, customer_name: null,
@@ -127,19 +131,80 @@ function parsePayPalEmail(body, msgDate) {
     amount: null, received_at: null
   };
   let m;
+
+  // 取引ID: *取引ID:*XXXXX 形式にも対応
+  m = body.match(/\*?取引ID[*:：\s　]*\*?\s*([A-Z0-9]{10,25})/);
+  if (m) result.transaction_id = m[1].trim();
+
+  // 顧客メール: 複数パターンで順番に試行
+  // パターン1: "顧客のメールアドレス" セクション（管理者向けPDFメール形式）
   m = body.match(/顧客のメールアドレス[\s\S]*?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
   if (m) result.customer_email = m[1];
-  m = body.match(/顧客名[\s　]+([^\n\r]+?)(?=\s*顧客のメール|\s*$)/);
+  // パターン2: "メールアドレス:" ラベル（HTML変換形式）
+  if (!result.customer_email) {
+    m = body.match(/メールアドレス[:：\s　]+([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+    if (m) result.customer_email = m[1];
+  }
+  // パターン3: 本文中の全メールアドレスから paypal.com 以外を採用
+  if (!result.customer_email) {
+    const allEmails = body.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+    const payer = allEmails.find(function(e) { return e.indexOf('paypal.com') === -1; });
+    if (payer) result.customer_email = payer;
+  }
+
+  // 顧客名: 複数パターンで順番に試行
+  m = body.match(/顧客名[\s　]+([^\n\r]+)/);
   if (m) result.customer_name = m[1].trim();
-  m = body.match(/定期支払いID[\s　]+([A-Z0-9-]+)/);
-  if (m) result.subscription_id = m[1];
-  m = body.match(/取引ID[:：\s　]+([A-Z0-9]+)/);
-  if (m) result.transaction_id = m[1];
-  m = body.match(/受取額[\s　]+¥?([\d,]+(?:\.\d+)?)/);
+  if (!result.customer_name) {
+    m = body.match(/お名前[:：\s　]+([^\n\r]+)/);
+    if (m) result.customer_name = m[1].trim();
+  }
+
+  // 定期支払いID: アスタリスク付きにも対応
+  m = body.match(/\*?定期支払いID[*:：\s　]*\*?\s*([A-Z0-9I][A-Z0-9-]{4,})/);
+  if (m) result.subscription_id = m[1].trim();
+
+  // 受取額: アスタリスク・スペース付きにも対応
+  m = body.match(/受取額[\s　*]*¥?\s*([\d,]+(?:\.\d+)?)/);
   if (m) result.amount = parseFloat(m[1].replace(/,/g, ''));
+
   // 受信日時（日本時間でフォーマット）
   result.received_at = Utilities.formatDate(msgDate, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
   return result;
+}
+
+
+// ===========================================
+// PayPal 新規サブスク契約通知 → LINE（情報通知のみ）
+// 件名: "○○様に対する新しい自動支払い設定があります"
+// 入金処理は checkTtsPayPalAndNotify が担うので、ここは通知だけ
+// ===========================================
+function checkTtsPayPalSubscriptionStarted() {
+  const query = 'from:service-jp@paypal.com "新しい自動支払い設定があります" is:unread';
+  const threads = GmailApp.search(query);
+
+  threads.forEach(function(thread) {
+    const messages = thread.getMessages();
+    messages.forEach(function(msg) {
+      if (!msg.isUnread()) return;
+
+      const subject = msg.getSubject();
+      const date = Utilities.formatDate(msg.getDate(), 'Asia/Tokyo', 'yyyy/MM/dd HH:mm');
+
+      // 件名から顧客名を抽出 例: "MATSUDA TOMOKO様に対する新しい自動支払い設定があります"
+      const nameMatch = subject.match(/^(.+?)様に対する新しい自動支払い設定があります/);
+      const customerName = nameMatch ? nameMatch[1] : '不明';
+
+      const lineMsg =
+        '📋 TTS 新規サブスク契約\n\n' +
+        '📅 ' + date + '\n' +
+        '👤 ' + customerName + '\n\n' +
+        '⏳ まもなく入金確認メールが届きます';
+
+      sendLineMessage(lineMsg);
+      msg.markRead();
+    });
+  });
 }
 
 
@@ -190,9 +255,20 @@ function sendLineMessage(text) {
 
 | 変数 | 値の取得元 | 保存場所 |
 |---|---|---|
-| `LINE_TOKEN` | LINE Developers > Messaging API設定 > チャネルアクセストークン（長期） | GASエディタ |
-| `TARGET_ID` | 別途取得した TTS事務局LINEグループID | GASエディタ |
+| `LINE_TOKEN` | **TTS公式LINE（事務局/旧）** の Messaging API > チャネルアクセストークン（長期） | GASエディタ |
+| `TARGET_ID` | TTS事務局LINEグループID（C5560f99...） | GASエディタ |
 | `TTS_PAYPAL_TOKEN` | TTSシステムの Vercel環境変数 `PAYPAL_NOTIFY_TOKEN` と同値 | GASエディタ + Vercel |
+
+## ⚠ 重要：3つのLINE OAの使い分け（混同注意）
+
+| LINE OA | 用途 | トークン保存場所 |
+|---|---|---|
+| **TTS公式LINE（事務局/旧）** | 事務局グループへのGAS通知 | **GAS の `LINE_TOKEN`** |
+| **TTSオンライン公式LINE（新/受講生用）** | 受講生とのやりとり（リッチメニュー、Push、Webhook） | Vercel の `LINE_CHANNEL_ACCESS_TOKEN` |
+| Lステップ用 | 廃止予定 | – |
+
+GASは事務局グループに送信するので「TTS公式LINE（事務局）」の方のトークンが必要。  
+TTSオンライン公式LINEのトークンを GAS に入れると 401 エラーになる。
 
 ---
 
@@ -280,6 +356,7 @@ function copyFolderContents(srcFolder, destFolder) {
 | 関数 | 種類 | 頻度 |
 |---|---|---|
 | `checkTtsPayPalAndNotify` | 時間主導型 | 5分おき |
+| `checkTtsPayPalSubscriptionStarted` | 時間主導型 | 5分おき |
 | `checkTtsApplyAndNotify` | 時間主導型 | 5分おき |
 
 ### trademasternikkei225@gmail.com の GAS（Drive複製用）
