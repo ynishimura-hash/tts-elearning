@@ -41,13 +41,28 @@ export default function AdminUsersPage() {
   const [userCourseProgress, setUserCourseProgress] = useState<{ name: string; done: number; total: number; courseId: string }[]>([])
   const [courseContentDetail, setCourseContentDetail] = useState<Record<string, { name: string; completed: boolean; completedAt: string | null }[]>>({})
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null)
+  const [paymentHistory, setPaymentHistory] = useState<{ id: string; received_at: string; amount: number | null; transaction_id: string; subscription_id: string | null; is_initial: boolean }[]>([])
 
   useEffect(() => { fetchData() }, [])
 
   // ユーザー詳細表示時にコースごと進捗を取得
   useEffect(() => {
-    if (!selectedUser) { setUserCourseProgress([]); setCourseContentDetail({}); setExpandedCourse(null); return }
+    if (!selectedUser) {
+      setUserCourseProgress([]); setCourseContentDetail({}); setExpandedCourse(null);
+      setPaymentHistory([])
+      return
+    }
     const supabase = createClient()
+    // 入金履歴を取得
+    supabase
+      .from('paypal_payments')
+      .select('id, received_at, amount, transaction_id, subscription_id, is_initial')
+      .eq('user_id', selectedUser.id)
+      .order('received_at', { ascending: false })
+      .then(({ data }) => {
+        if (data) setPaymentHistory(data)
+      })
+
     async function fetchUserProgress() {
       const isOnline = selectedUser!.is_online
       const { data: courses } = await supabase
@@ -460,6 +475,39 @@ export default function AdminUsersPage() {
                 <div className="col-span-2"><span className="text-gray-500">Driveフォルダ:</span> <a href={selectedUser.drive_folder_url} target="_blank" rel="noopener noreferrer" className="text-[#384a8f] hover:underline font-medium ml-1">開く</a></div>
               )}
             </div>
+
+            {/* 入金履歴 */}
+            <div className="mt-6 pt-4 border-t">
+              <h3 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                💰 入金履歴
+                <span className="text-xs font-normal text-gray-500">{paymentHistory.length}件</span>
+              </h3>
+              {paymentHistory.length === 0 ? (
+                <p className="text-xs text-gray-400">入金履歴はありません</p>
+              ) : (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {paymentHistory.map(p => (
+                    <div key={p.id} className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-700 font-medium">
+                          {new Date(p.received_at).toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' })}
+                        </span>
+                        {p.is_initial && (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">初回</span>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        {p.amount && (
+                          <span className="font-bold text-gray-700">¥{Number(p.amount).toLocaleString()}</span>
+                        )}
+                        <div className="text-gray-400 font-mono text-[10px]">{p.transaction_id}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* コースごとの進捗 */}
             {userCourseProgress.length > 0 && (
               <div className="mt-6 pt-4 border-t">

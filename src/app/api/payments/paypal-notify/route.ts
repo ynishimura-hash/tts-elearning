@@ -216,20 +216,40 @@ export async function POST(request: NextRequest) {
 
   if (!app) {
     // 該当なし = 月額継続課金 or 紐付けミス
-    // TTSシステム側では何もせず、履歴だけ残す
+    // TTSシステム側ではアカウント発行はしないが、履歴を user に紐付けて記録
+    const { data: matchedUser } = await admin
+      .from('users')
+      .select('id, full_name')
+      .eq('email', payerEmail)
+      .maybeSingle()
+
+    // 既存ユーザーで paypal_subscription_id が未設定なら紐付け
+    if (matchedUser && subscriptionId) {
+      await admin
+        .from('users')
+        .update({ paypal_subscription_id: subscriptionId })
+        .eq('id', matchedUser.id)
+        .is('paypal_subscription_id', null)
+    }
+
     await admin.from('paypal_payments').insert({
       transaction_id: transactionId,
       subscription_id: subscriptionId,
       payer_email: payerEmail,
-      payer_name: body.customer_name || null,
+      payer_name: body.customer_name || matchedUser?.full_name || null,
       amount: body.amount || null,
       currency: body.currency || 'JPY',
       is_initial: false,
+      user_id: matchedUser?.id || null,
       raw_payload: body.raw_payload || null,
     })
     return NextResponse.json({
       status: 'no_action',
-      message: '入金待ち申込なし（月額継続 or 既存ユーザーの課金）',
+      message: matchedUser
+        ? '既存ユーザーの月額継続課金として履歴に記録'
+        : '該当ユーザーなし、履歴のみ記録',
+      user_id: matchedUser?.id || null,
+      full_name: matchedUser?.full_name || null,
     })
   }
 
