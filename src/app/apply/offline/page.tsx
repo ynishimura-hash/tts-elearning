@@ -10,6 +10,7 @@ type Referral = (typeof REFERRAL_OPTIONS)[number]
 export default function OfflineApplyPage() {
   const [form, setForm] = useState({
     full_name: '',
+    furigana: '',
     email: '',
     phone: '',
     birthdate: '',
@@ -121,6 +122,14 @@ export default function OfflineApplyPage() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">ふりがな <span className="text-red-500">*</span></label>
+                <input type="text" required value={form.furigana}
+                  onChange={(e) => setForm({ ...form, furigana: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none"
+                  placeholder="やまだ たろう" />
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">電話番号 <span className="text-red-500">*</span></label>
                 <input type="tel" required value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
@@ -132,7 +141,8 @@ export default function OfflineApplyPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">生年月日 <span className="text-red-500">*</span></label>
                 <input type="date" required value={form.birthdate}
                   onChange={(e) => setForm({ ...form, birthdate: e.target.value })}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none" />
+                  className="block w-full min-w-0 box-border px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#384a8f] outline-none appearance-none"
+                  style={{ WebkitAppearance: 'none' }} />
               </div>
 
               <div>

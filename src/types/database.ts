@@ -170,6 +170,7 @@ export interface Application {
   processed_at: string | null
   created_at: string
   // オンライン申込フォーム拡張
+  furigana: string | null
   birthdate: string | null
   postal_code: string | null
   address: string | null

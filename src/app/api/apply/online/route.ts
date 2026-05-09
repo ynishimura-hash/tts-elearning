@@ -5,6 +5,7 @@ import { pushLineMessage } from '@/lib/line-push'
 
 interface ApplyBody {
   full_name: string
+  furigana: string
   email: string
   phone: string
   birthdate: string
@@ -35,7 +36,7 @@ ${PAYPAL_LINK}
 ${PAYPAL_GUIDE}
 
 【お申し込み内容】
-氏名: ${b.full_name}
+氏名: ${b.full_name}（${b.furigana}）
 メールアドレス: ${b.email}
 電話番号: ${b.phone}
 生年月日: ${b.birthdate}
@@ -87,7 +88,7 @@ export async function POST(request: NextRequest) {
   }
 
   // バリデーション
-  const required: (keyof ApplyBody)[] = ['full_name', 'email', 'phone', 'birthdate', 'postal_code', 'address', 'referral_source']
+  const required: (keyof ApplyBody)[] = ['full_name', 'furigana', 'email', 'phone', 'birthdate', 'postal_code', 'address', 'referral_source']
   for (const key of required) {
     if (!body[key]?.toString().trim()) {
       return NextResponse.json({ success: false, error: `${key} は必須項目です` }, { status: 400 })
@@ -120,6 +121,7 @@ export async function POST(request: NextRequest) {
   // applications に INSERT
   const { data, error } = await admin.from('applications').insert({
     full_name: body.full_name.trim(),
+    furigana: body.furigana.trim(),
     email: body.email.trim().toLowerCase(),
     phone: body.phone.trim(),
     birthdate: body.birthdate,
