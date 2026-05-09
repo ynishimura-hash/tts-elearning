@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
+import { pushLineMessage } from '@/lib/line-push'
 
 interface ApplyBody {
   full_name: string
@@ -11,6 +12,7 @@ interface ApplyBody {
   address: string
   referral_source: string
   referral_detail?: string
+  token?: string | null
 }
 
 const PAYPAL_LINK = 'https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-2YP42855B3104421JNGUX57Q'
@@ -102,6 +104,19 @@ export async function POST(request: NextRequest) {
   }
   const admin = createServiceClient(supabaseUrl, serviceRoleKey)
 
+  // token があれば line_user_id を解決
+  let lineUserId: string | null = null
+  if (body.token) {
+    const { data: invite } = await admin
+      .from('apply_invite_tokens')
+      .select('token, line_user_id, expires_at, used_at')
+      .eq('token', body.token)
+      .maybeSingle()
+    if (invite && !invite.used_at && new Date(invite.expires_at) > new Date()) {
+      lineUserId = invite.line_user_id
+    }
+  }
+
   // applications に INSERT
   const { data, error } = await admin.from('applications').insert({
     full_name: body.full_name.trim(),
@@ -116,10 +131,19 @@ export async function POST(request: NextRequest) {
     status: 'pending',
     payment_status: 'unpaid',
     auto_reply_sent: false,
+    line_user_id: lineUserId,
   }).select('id').single()
 
   if (error) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+  }
+
+  // token を used に
+  if (body.token && lineUserId) {
+    await admin
+      .from('apply_invite_tokens')
+      .update({ used_at: new Date().toISOString(), application_id: data.id })
+      .eq('token', body.token)
   }
 
   const sent = await sendAutoReply(body)
@@ -127,5 +151,26 @@ export async function POST(request: NextRequest) {
     await admin.from('applications').update({ auto_reply_sent: true }).eq('id', data.id)
   }
 
-  return NextResponse.json({ success: true, id: data.id, auto_reply_sent: sent })
+  // LINE 紐付け済みなら、PayPal リンクを LINE にも Push
+  let linePushed = false
+  if (lineUserId) {
+    const lineMessage =
+      `${body.full_name.trim()}様\n\n` +
+      `TTSオンライン有料会員にお申し込みいただきありがとうございました！\n\n` +
+      `下記URLよりPayPalでお支払いをお願いします。\n` +
+      `${PAYPAL_LINK}\n\n` +
+      `※PayPalでのお支払い方法についてご不明な方はこちらをご参照ください。\n` +
+      `${PAYPAL_GUIDE}\n\n` +
+      `ご入金が確認でき次第、3営業日以内にe-ラーニングのアカウント発行をさせていただきます。\n\n` +
+      `TTSオンライン運営事務局`
+    linePushed = await pushLineMessage(lineUserId, lineMessage)
+  }
+
+  return NextResponse.json({
+    success: true,
+    id: data.id,
+    auto_reply_sent: sent,
+    line_pushed: linePushed,
+    line_linked: !!lineUserId,
+  })
 }

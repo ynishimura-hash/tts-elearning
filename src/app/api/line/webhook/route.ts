@@ -81,19 +81,54 @@ export async function POST(request: NextRequest) {
     )
 
     const text = event.message?.text || ''
+    const lineUserId = event.source.userId
 
-    // 「申し込み」「申込」テキストで申込URLを返信
+    // 「申し込み」「申込」テキストで token 発行 + 専用URLを返信
     if (
       event.type === 'message' &&
       event.message?.type === 'text' &&
       event.replyToken &&
+      lineUserId &&
       /^(申し?込み?|apply)$/i.test(text.trim())
     ) {
-      const applyUrl = 'https://tts-e.vercel.app/apply/online'
+      // 既存の未使用トークンがあれば再利用、なければ新規発行
+      const { data: existing } = await sb
+        .from('apply_invite_tokens')
+        .select('token, expires_at')
+        .eq('line_user_id', lineUserId)
+        .is('used_at', null)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      let token: string
+      if (existing) {
+        token = existing.token
+      } else {
+        const { data: created, error } = await sb
+          .from('apply_invite_tokens')
+          .insert({
+            line_user_id: lineUserId,
+            source_type: sourceType,
+            course_type: 'online',
+          })
+          .select('token')
+          .single()
+        if (error || !created) {
+          await replyToLine(event.replyToken, '申込URLの発行に失敗しました。お手数ですが事務局までご連絡ください。')
+          continue
+        }
+        token = created.token
+      }
+
+      const applyUrl = `https://tts-e.vercel.app/apply/online?token=${token}`
       await replyToLine(
         event.replyToken,
-        `TTSオンライン有料会員のお申込みはこちらからどうぞ。\n\n${applyUrl}\n\n` +
-        `フォームに必要事項をご入力いただいた後、PayPalでのお支払い案内メールをお送りします。`
+        `TTSオンライン有料会員のお申込みは下記URLからどうぞ。\n\n` +
+        `${applyUrl}\n\n` +
+        `※ このURLは7日間有効です。\n` +
+        `※ フォーム送信後、PayPalお支払いリンクをこちらのトークと、ご入力いただいたメールアドレス宛にお送りします。`
       )
       continue
     }

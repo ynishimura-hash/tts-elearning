@@ -1,13 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { toast, Toaster } from 'sonner'
-import { CheckCircle2, Send, AlertCircle } from 'lucide-react'
+import { CheckCircle2, Send, AlertCircle, MessageCircle } from 'lucide-react'
 
 const REFERRAL_OPTIONS = ['HPから', '知人の紹介', 'SNSにて', 'その他'] as const
 type Referral = (typeof REFERRAL_OPTIONS)[number]
 
 export default function OnlineApplyPage() {
+  return (
+    <Suspense fallback={null}>
+      <OnlineApplyForm />
+    </Suspense>
+  )
+}
+
+function OnlineApplyForm() {
+  const searchParams = useSearchParams()
+  const token = searchParams.get('token')
   const [form, setForm] = useState({
     full_name: '',
     email: '',
@@ -20,6 +31,7 @@ export default function OnlineApplyPage() {
   })
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [linePushed, setLinePushed] = useState(false)
 
   const showReferralDetail = ['知人の紹介', 'SNSにて', 'その他'].includes(form.referral_source)
 
@@ -34,10 +46,11 @@ export default function OnlineApplyPage() {
       const res = await fetch('/api/apply/online', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, token }),
       })
       const data = await res.json()
       if (data.success) {
+        setLinePushed(!!data.line_pushed)
         setSubmitted(true)
       } else {
         toast.error(data.error || '送信に失敗しました')
@@ -59,9 +72,19 @@ export default function OnlineApplyPage() {
             </div>
             <h1 className="text-2xl font-bold text-gray-800 mb-3">申し込みを受け付けました</h1>
             <p className="text-gray-600 leading-relaxed mb-6">
-              ご入力いただいたメールアドレス宛に<br />
-              <strong className="text-gray-800">入金手続きのご案内メール</strong>をお送りしました。<br />
-              受信箱をご確認いただき、PayPalでのお支払いをお願いいたします。
+              {linePushed ? (
+                <>
+                  <strong className="text-gray-800">LINEとメールの両方</strong>に<br />
+                  PayPalお支払いリンクをお送りしました。<br />
+                  どちらかからお支払いをお願いいたします。
+                </>
+              ) : (
+                <>
+                  ご入力いただいたメールアドレス宛に<br />
+                  <strong className="text-gray-800">入金手続きのご案内メール</strong>をお送りしました。<br />
+                  受信箱をご確認いただき、PayPalでのお支払いをお願いいたします。
+                </>
+              )}
             </p>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900 text-left">
               <p className="font-bold mb-1">⚠ メールが届かない場合</p>
@@ -95,6 +118,19 @@ export default function OnlineApplyPage() {
 
             {/* フォーム */}
             <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-5">
+              {/* LINE 紐付け済みバナー */}
+              {token && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-2 text-sm">
+                  <MessageCircle className="w-5 h-5 text-[#06C755] flex-shrink-0 mt-0.5" />
+                  <div className="text-green-900">
+                    <p className="font-bold">LINE公式アカウントと連携中</p>
+                    <p className="text-xs text-green-700 mt-0.5">
+                      送信後、PayPalお支払いリンクをLINEとメールの両方でお送りします。
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* メールアドレス */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
