@@ -32,6 +32,10 @@ export interface User {
   is_test: boolean
   created_at: string
   updated_at: string
+  paypal_subscription_id?: string | null
+  last_payment_at?: string | null
+  last_payment_amount?: number | null
+  last_payment_transaction_id?: string | null
 }
 
 export interface Course {

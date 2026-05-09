@@ -41,7 +41,7 @@ export default function AdminUsersPage() {
   const [userCourseProgress, setUserCourseProgress] = useState<{ name: string; done: number; total: number; courseId: string }[]>([])
   const [courseContentDetail, setCourseContentDetail] = useState<Record<string, { name: string; completed: boolean; completedAt: string | null }[]>>({})
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null)
-  const [paymentHistory, setPaymentHistory] = useState<{ id: string; received_at: string; amount: number | null; transaction_id: string; subscription_id: string | null; is_initial: boolean }[]>([])
+  const [initialPayment, setInitialPayment] = useState<{ received_at: string; amount: number | null; transaction_id: string } | null>(null)
 
   useEffect(() => { fetchData() }, [])
 
@@ -49,18 +49,21 @@ export default function AdminUsersPage() {
   useEffect(() => {
     if (!selectedUser) {
       setUserCourseProgress([]); setCourseContentDetail({}); setExpandedCourse(null);
-      setPaymentHistory([])
+      setInitialPayment(null)
       return
     }
     const supabase = createClient()
-    // 入金履歴を取得
+    // 初回入金情報のみ取得（月次は users.last_payment_* に保存）
     supabase
       .from('paypal_payments')
-      .select('id, received_at, amount, transaction_id, subscription_id, is_initial')
+      .select('received_at, amount, transaction_id')
       .eq('user_id', selectedUser.id)
+      .eq('is_initial', true)
       .order('received_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
       .then(({ data }) => {
-        if (data) setPaymentHistory(data)
+        setInitialPayment(data || null)
       })
 
     async function fetchUserProgress() {
@@ -476,36 +479,41 @@ export default function AdminUsersPage() {
               )}
             </div>
 
-            {/* 入金履歴 */}
+            {/* 入金状況 */}
             <div className="mt-6 pt-4 border-t">
-              <h3 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
-                💰 入金履歴
-                <span className="text-xs font-normal text-gray-500">{paymentHistory.length}件</span>
-              </h3>
-              {paymentHistory.length === 0 ? (
-                <p className="text-xs text-gray-400">入金履歴はありません</p>
-              ) : (
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {paymentHistory.map(p => (
-                    <div key={p.id} className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-700 font-medium">
-                          {new Date(p.received_at).toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' })}
-                        </span>
-                        {p.is_initial && (
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">初回</span>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        {p.amount && (
-                          <span className="font-bold text-gray-700">¥{Number(p.amount).toLocaleString()}</span>
-                        )}
-                        <div className="text-gray-400 font-mono text-[10px]">{p.transaction_id}</div>
-                      </div>
-                    </div>
-                  ))}
+              <h3 className="font-bold text-gray-800 text-sm mb-3">💰 入金状況</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                  <p className="text-emerald-700 font-bold mb-1">初回入金</p>
+                  {initialPayment ? (
+                    <>
+                      <p className="text-gray-700">
+                        {new Date(initialPayment.received_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                      {initialPayment.amount && (
+                        <p className="font-bold text-gray-800">¥{Number(initialPayment.amount).toLocaleString()}</p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-gray-400">記録なし</p>
+                  )}
                 </div>
-              )}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-blue-700 font-bold mb-1">最終入金</p>
+                  {selectedUser.last_payment_at ? (
+                    <>
+                      <p className="text-gray-700">
+                        {new Date(selectedUser.last_payment_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                      {selectedUser.last_payment_amount && (
+                        <p className="font-bold text-gray-800">¥{Number(selectedUser.last_payment_amount).toLocaleString()}</p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-gray-400">記録なし</p>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* コースごとの進捗 */}

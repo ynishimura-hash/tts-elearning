@@ -215,41 +215,37 @@ export async function POST(request: NextRequest) {
     .maybeSingle()
 
   if (!app) {
-    // 該当なし = 月額継続課金 or 紐付けミス
-    // TTSシステム側ではアカウント発行はしないが、履歴を user に紐付けて記録
+    // 該当なし = 月額継続課金 or 既存ユーザー
+    // paypal_payments には保存せず、users.last_payment_* のみ更新
     const { data: matchedUser } = await admin
       .from('users')
-      .select('id, full_name')
+      .select('id, full_name, paypal_subscription_id')
       .eq('email', payerEmail)
       .maybeSingle()
 
-    // 既存ユーザーで paypal_subscription_id が未設定なら紐付け
-    if (matchedUser && subscriptionId) {
-      await admin
-        .from('users')
-        .update({ paypal_subscription_id: subscriptionId })
-        .eq('id', matchedUser.id)
-        .is('paypal_subscription_id', null)
+    if (!matchedUser) {
+      return NextResponse.json({
+        status: 'no_action',
+        message: '該当ユーザーなし',
+        user_id: null,
+      })
     }
 
-    await admin.from('paypal_payments').insert({
-      transaction_id: transactionId,
-      subscription_id: subscriptionId,
-      payer_email: payerEmail,
-      payer_name: body.customer_name || matchedUser?.full_name || null,
-      amount: body.amount || null,
-      currency: body.currency || 'JPY',
-      is_initial: false,
-      user_id: matchedUser?.id || null,
-      raw_payload: body.raw_payload || null,
-    })
+    const updates: Record<string, unknown> = {
+      last_payment_at: new Date().toISOString(),
+      last_payment_amount: body.amount || null,
+      last_payment_transaction_id: transactionId,
+    }
+    if (subscriptionId && !matchedUser.paypal_subscription_id) {
+      updates.paypal_subscription_id = subscriptionId
+    }
+    await admin.from('users').update(updates).eq('id', matchedUser.id)
+
     return NextResponse.json({
       status: 'no_action',
-      message: matchedUser
-        ? '既存ユーザーの月額継続課金として履歴に記録'
-        : '該当ユーザーなし、履歴のみ記録',
-      user_id: matchedUser?.id || null,
-      full_name: matchedUser?.full_name || null,
+      message: '既存ユーザーの月額継続課金（last_payment_at 更新）',
+      user_id: matchedUser.id,
+      full_name: matchedUser.full_name,
     })
   }
 
@@ -337,7 +333,14 @@ export async function POST(request: NextRequest) {
     paypal_subscription_id: subscriptionId,
   }).eq('id', app.id)
 
-  // 入金履歴に記録
+  // users の最終入金情報を更新
+  await admin.from('users').update({
+    last_payment_at: new Date().toISOString(),
+    last_payment_amount: body.amount || null,
+    last_payment_transaction_id: transactionId,
+  }).eq('id', userId)
+
+  // 入金履歴に記録（初回のみ paypal_payments に保存）
   await admin.from('paypal_payments').insert({
     transaction_id: transactionId,
     subscription_id: subscriptionId,
