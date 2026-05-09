@@ -354,17 +354,20 @@ export async function POST(request: NextRequest) {
     raw_payload: body.raw_payload || null,
   })
 
-  // LINE Push（line_user_id があれば）
+  // LINE Push（line_user_id があれば、ログイン情報を含めて送信）
   let linePushed = false
   if (app.line_user_id) {
     const message =
       `${app.full_name}様\n\n` +
       `お支払いを確認いたしました。\n` +
-      `e-ラーニングのアカウントを発行しましたので、\n` +
-      `ご入力いただいたメールアドレス宛にログイン情報をお送りしています。\n\n` +
-      `ご確認のほど、よろしくお願いいたします。\n\n` +
+      `e-ラーニングのアカウントを発行いたしましたので、下記情報でログインをお願いします。\n\n` +
       `▼ ログインURL\n` +
       `https://tts-e.vercel.app/login\n\n` +
+      `▼ アカウント情報\n` +
+      `メール: ${payerEmail}\n` +
+      `パスワード: ${password}\n\n` +
+      `※ ログイン後、マイページから必ずパスワードを変更してください。\n` +
+      `※ ご入力いただいたメールアドレス宛にも同じ案内をお送りしています。\n\n` +
       `TTSオンライン運営事務局`
     linePushed = await pushLineMessage(app.line_user_id, message)
   }

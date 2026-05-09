@@ -8,10 +8,20 @@ GAS は **`kudo@creatte.jp` のアカウント**で運用されています。Gm
 
 | 関数名 | 役割 | トリガー |
 |---|---|---|
-| `checkTtsPayPalAndNotify` | PayPal 入金通知メールを検知し、TTS API 連携 + LINE通知 | 5分おき |
-| `checkTtsApplyAndNotify` | TTS ピークボトム申請通知メールを検知し LINE通知 | 5分おき |
+| `checkTtsPayPalAndNotify` | 「支払いを受け取りました」メール検知 → TTS API + LINE通知 | 5分おき |
+| `checkTtsPayPalSubscriptionStarted` | 「新しい自動支払い設定があります」メール検知 → 契約成立通知のみ | 5分おき |
+| `checkTtsApplyAndNotify` | TTS ピークボトム申請通知メール検知 → LINE通知 | 5分おき |
 | `parsePayPalEmail` | PayPal メール本文から必要情報を抽出（ヘルパー） | – |
 | `sendLineMessage` | LINE Push API ヘルパー | – |
+
+## PayPal が送る2種類のメール
+
+| 件名 | 内容 | 担当関数 |
+|---|---|---|
+| **支払いを受け取りました** | 実際の入金通知（顧客情報・取引ID・金額あり） | `checkTtsPayPalAndNotify` |
+| **{名前}様に対する新しい自動支払い設定があります** | サブスク契約成立通知 | `checkTtsPayPalSubscriptionStarted` |
+
+初回サブスク時は **両方届く**。月次更新は「支払いを受け取りました」だけ。
 
 ---
 
