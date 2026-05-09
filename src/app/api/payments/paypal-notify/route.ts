@@ -204,74 +204,7 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  // ① subscription_id で users 検索 → 月次課金
-  if (subscriptionId) {
-    const { data: existingUser } = await admin
-      .from('users')
-      .select('id, full_name, email, line_user_id')
-      .eq('paypal_subscription_id', subscriptionId)
-      .maybeSingle()
-    if (existingUser) {
-      // 月次課金として記録
-      await admin.from('paypal_payments').insert({
-        transaction_id: transactionId,
-        subscription_id: subscriptionId,
-        payer_email: payerEmail,
-        payer_name: body.customer_name || null,
-        amount: body.amount || null,
-        currency: body.currency || 'JPY',
-        is_initial: false,
-        user_id: existingUser.id,
-        raw_payload: body.raw_payload || null,
-      })
-      return NextResponse.json({
-        status: 'recurring',
-        is_initial: false,
-        user_id: existingUser.id,
-        full_name: existingUser.full_name,
-      })
-    }
-  }
-
-  // ② 既存ユーザー（メール一致）のサブスク初回検知
-  //    → 既に登録済みの受講生（移行ユーザーなど）が PayPal 課金を始めたケース
-  //    アカウント発行は不要、subscription_id を紐付けて月次扱いで記録
-  const { data: existingUserByEmail } = await admin
-    .from('users')
-    .select('id, full_name, email, line_user_id, is_admin, is_test')
-    .eq('email', payerEmail)
-    .maybeSingle()
-  if (existingUserByEmail && !existingUserByEmail.is_admin && !existingUserByEmail.is_test) {
-    // subscription_id を紐付け（未設定の場合のみ）
-    if (subscriptionId) {
-      await admin
-        .from('users')
-        .update({ paypal_subscription_id: subscriptionId })
-        .eq('id', existingUserByEmail.id)
-        .is('paypal_subscription_id', null)
-    }
-    // 既存ユーザーの初回サブスク決済として記録
-    await admin.from('paypal_payments').insert({
-      transaction_id: transactionId,
-      subscription_id: subscriptionId,
-      payer_email: payerEmail,
-      payer_name: body.customer_name || existingUserByEmail.full_name,
-      amount: body.amount || null,
-      currency: body.currency || 'JPY',
-      is_initial: false, // 既存ユーザーなのでアカウント発行は不要 → 月次扱い
-      user_id: existingUserByEmail.id,
-      raw_payload: body.raw_payload || null,
-    })
-    return NextResponse.json({
-      status: 'existing_user_subscription',
-      message: '既存ユーザーのPayPal課金を紐付けました（アカウント発行は不要）',
-      user_id: existingUserByEmail.id,
-      full_name: existingUserByEmail.full_name,
-      subscription_id_bound: !!subscriptionId,
-    })
-  }
-
-  // ③ 該当 application を検索（unpaid）→ 新規申込の初回入金
+  // 入金待ちの申込を email で検索（これだけが処理対象）
   const { data: app } = await admin
     .from('applications')
     .select('*')
@@ -282,7 +215,8 @@ export async function POST(request: NextRequest) {
     .maybeSingle()
 
   if (!app) {
-    // 申込が見つからない → ログだけ残して手動対応に
+    // 該当なし = 月額継続課金 or 紐付けミス
+    // TTSシステム側では何もせず、履歴だけ残す
     await admin.from('paypal_payments').insert({
       transaction_id: transactionId,
       subscription_id: subscriptionId,
@@ -294,8 +228,8 @@ export async function POST(request: NextRequest) {
       raw_payload: body.raw_payload || null,
     })
     return NextResponse.json({
-      status: 'no_match',
-      message: '該当する未入金申込・既存ユーザーが見つかりません。手動対応してください',
+      status: 'no_action',
+      message: '入金待ち申込なし（月額継続 or 既存ユーザーの課金）',
     })
   }
 
