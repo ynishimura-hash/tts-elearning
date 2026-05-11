@@ -3,7 +3,9 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { toast, Toaster } from 'sonner'
-import { CheckCircle2, Send, AlertCircle, MessageCircle } from 'lucide-react'
+import { CheckCircle2, Send, AlertCircle, MessageCircle, ExternalLink } from 'lucide-react'
+
+const LINE_OA_URL = 'https://lin.ee/5JaSzPA'
 
 const REFERRAL_OPTIONS = ['HPから', '知人の紹介', 'SNSにて', 'その他'] as const
 type Referral = (typeof REFERRAL_OPTIONS)[number]
@@ -72,29 +74,45 @@ function OnlineApplyForm() {
               <CheckCircle2 className="w-8 h-8 text-emerald-600" />
             </div>
             <h1 className="text-2xl font-bold text-gray-800 mb-3">申し込みを受け付けました</h1>
-            <p className="text-gray-600 leading-relaxed mb-6">
-              {linePushed ? (
-                <>
-                  <strong className="text-gray-800">LINEとメールの両方</strong>に<br />
-                  PayPalお支払いリンクをお送りしました。<br />
-                  どちらかからお支払いをお願いいたします。
-                </>
-              ) : (
-                <>
+
+            {linePushed ? (
+              <>
+                <p className="text-gray-600 leading-relaxed mb-6">
+                  入金用のURLが<strong className="text-gray-800">LINEに届いております</strong>ので、<br />
+                  LINEに戻って入金処理を進めていただけると幸いです。
+                </p>
+                <a
+                  href={LINE_OA_URL}
+                  className="inline-flex items-center justify-center gap-2 w-full md:w-auto px-8 py-3.5 bg-[#06C755] text-white rounded-lg font-bold hover:bg-[#05b04c] transition-colors text-base mb-6"
+                >
+                  <MessageCircle className="w-5 h-5" />
+                  LINE公式アカウントに戻る
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900 text-left">
+                  <p className="font-bold mb-1">📩 メールも合わせて送信しています</p>
+                  <p className="text-amber-800">
+                    念のため、ご入力いただいたメールアドレス宛にも入金手続きのご案内メールをお送りしています。LINEが届かない場合は、メールからもお支払いいただけます。
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-gray-600 leading-relaxed mb-6">
                   ご入力いただいたメールアドレス宛に<br />
                   <strong className="text-gray-800">入金手続きのご案内メール</strong>をお送りしました。<br />
                   受信箱をご確認いただき、PayPalでのお支払いをお願いいたします。
-                </>
-              )}
-            </p>
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900 text-left">
-              <p className="font-bold mb-1">⚠ メールが届かない場合</p>
-              <ul className="list-disc list-inside space-y-1 text-amber-800">
-                <li>迷惑メールフォルダをご確認ください</li>
-                <li>iCloud（@icloud.com / @me.com）は届きにくい場合があります</li>
-                <li>30分以上経っても届かない場合は事務局へお問い合わせください</li>
-              </ul>
-            </div>
+                </p>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900 text-left">
+                  <p className="font-bold mb-1">⚠ メールが届かない場合</p>
+                  <ul className="list-disc list-inside space-y-1 text-amber-800">
+                    <li>迷惑メールフォルダをご確認ください</li>
+                    <li>iCloud（@icloud.com / @me.com）は届きにくい場合があります</li>
+                    <li>30分以上経っても届かない場合は事務局へお問い合わせください</li>
+                  </ul>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </>

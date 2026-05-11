@@ -169,11 +169,42 @@ export async function POST(request: NextRequest) {
     linePushed = await pushLineMessage(lineUserId, lineMessage)
   }
 
+  // 管理者LINEグループに申込通知（is_peak_bottom_target = true のグループへ送る）
+  let adminGroupNotified = false
+  try {
+    const { data: adminGroup } = await admin
+      .from('line_groups')
+      .select('group_id')
+      .eq('is_peak_bottom_target', true)
+      .limit(1)
+      .maybeSingle()
+
+    if (adminGroup?.group_id) {
+      const referralLine = body.referral_detail
+        ? `${body.referral_source}（${body.referral_detail}）`
+        : body.referral_source
+      const groupMessage =
+        `📋 申し込みがありました！\n\n` +
+        `氏名: ${body.full_name.trim()}（${body.furigana.trim()}）\n` +
+        `メール: ${body.email.trim().toLowerCase()}\n` +
+        `電話: ${body.phone.trim()}\n` +
+        `生年月日: ${body.birthdate}\n` +
+        `住所: 〒${body.postal_code.trim()} ${body.address.trim()}\n` +
+        `きっかけ: ${referralLine}\n` +
+        `LINE連携: ${lineUserId ? 'あり' : 'なし'}\n\n` +
+        `申込ID: ${data.id}`
+      adminGroupNotified = await pushLineMessage(adminGroup.group_id, groupMessage)
+    }
+  } catch (err) {
+    console.error('admin group notify failed:', err)
+  }
+
   return NextResponse.json({
     success: true,
     id: data.id,
     auto_reply_sent: sent,
     line_pushed: linePushed,
     line_linked: !!lineUserId,
+    admin_group_notified: adminGroupNotified,
   })
 }
