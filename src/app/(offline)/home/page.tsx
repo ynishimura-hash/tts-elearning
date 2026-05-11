@@ -275,11 +275,8 @@ export default function HomePage() {
 
         {/* 右: コース一覧 */}
         <div className="lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4">
             <h2 className="text-lg font-bold text-gray-800">コース一覧</h2>
-            <Link href="/courses" className="text-sm text-[#384a8f] hover:underline">
-              すべて見る
-            </Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {courses.slice(0, 6).map((course, i) => {
