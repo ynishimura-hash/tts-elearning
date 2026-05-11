@@ -30,6 +30,7 @@ export interface User {
   auto_read_path: string | null
   auto_read_permitted: boolean
   is_test: boolean
+  is_tester: boolean
   created_at: string
   updated_at: string
   paypal_subscription_id?: string | null

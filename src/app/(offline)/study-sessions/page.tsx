@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
-import { CalendarDays, MapPin, CheckCircle2, XCircle, Clock, HelpCircle } from 'lucide-react'
+import { CalendarDays, MapPin, CheckCircle2, XCircle, Clock, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { formatDate, formatDateWithWeekday } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance } from '@/types/database'
 
@@ -98,9 +98,16 @@ export default function StudySessionsPage() {
     }))
   }
 
+  const [showAllPast, setShowAllPast] = useState(false)
   const now = new Date()
   const upcoming = sessions.filter(s => new Date(s.session_date) >= now)
-  const past = sessions.filter(s => new Date(s.session_date) < now)
+  // 過去は最新（新しい）が上に来るように降順ソート
+  const past = sessions
+    .filter(s => new Date(s.session_date) < now)
+    .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
+  const PAST_VISIBLE = 2
+  const visiblePast = showAllPast ? past : past.slice(0, PAST_VISIBLE)
+  const hiddenPastCount = Math.max(0, past.length - PAST_VISIBLE)
 
   return (
     <div className="space-y-6 pt-12 lg:pt-0 max-w-3xl mx-auto">
@@ -225,7 +232,7 @@ export default function StudySessionsPage() {
         <div>
           <h2 className="text-lg font-bold text-gray-800 mb-3">過去の勉強会</h2>
           <div className="space-y-3">
-            {past.map((session) => (
+            {visiblePast.map((session) => (
               <div key={session.id} className="bg-white/60 rounded-xl p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div>
@@ -245,6 +252,18 @@ export default function StudySessionsPage() {
               </div>
             ))}
           </div>
+          {hiddenPastCount > 0 && (
+            <button
+              onClick={() => setShowAllPast(v => !v)}
+              className="mt-3 inline-flex items-center gap-1.5 text-sm text-[#384a8f] hover:underline"
+            >
+              {showAllPast ? (
+                <>表示を折りたたむ <ChevronUp className="w-4 h-4" /></>
+              ) : (
+                <>過去の勉強会をすべて表示（あと{hiddenPastCount}件） <ChevronDown className="w-4 h-4" /></>
+              )}
+            </button>
+          )}
         </div>
       )}
     </div>

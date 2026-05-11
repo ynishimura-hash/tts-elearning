@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
-import { CalendarDays, Video, CheckCircle2, XCircle, Clock, HelpCircle, ExternalLink, Info, MessageSquare } from 'lucide-react'
+import { CalendarDays, Video, MapPin, CheckCircle2, XCircle, Clock, HelpCircle, ExternalLink, Info, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react'
 import { formatDate, formatDateWithWeekday } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance } from '@/types/database'
 
@@ -30,8 +30,11 @@ export default function OnlineStudySessionsPage() {
     const supabase = createClient()
 
     async function fetchData() {
-      const { data: sessionsData } = await supabase
-        .from('study_sessions').select('*').eq('is_online', true).order('session_date')
+      // テスターはリアル勉強会も取得
+      const query = supabase.from('study_sessions').select('*').order('session_date')
+      const { data: sessionsData } = user!.is_tester
+        ? await query
+        : await query.eq('is_online', true)
       if (sessionsData) setSessions(sessionsData)
 
       const { data: attendanceData } = await supabase
@@ -83,9 +86,26 @@ export default function OnlineStudySessionsPage() {
     }))
   }
 
+  const [showAllPast, setShowAllPast] = useState(false)
+  const [showAllPastOffline, setShowAllPastOffline] = useState(false)
   const now = new Date()
-  const upcoming = sessions.filter(s => new Date(s.session_date) >= now)
-  const past = sessions.filter(s => new Date(s.session_date) < now)
+  // オンライン勉強会
+  const onlineSessions = sessions.filter(s => s.is_online)
+  const upcoming = onlineSessions.filter(s => new Date(s.session_date) >= now)
+  const past = onlineSessions
+    .filter(s => new Date(s.session_date) < now)
+    .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
+  const PAST_VISIBLE = 2
+  const visiblePast = showAllPast ? past : past.slice(0, PAST_VISIBLE)
+  const hiddenPastCount = Math.max(0, past.length - PAST_VISIBLE)
+  // リアル勉強会（テスター限定で表示）
+  const offlineSessions = sessions.filter(s => !s.is_online)
+  const upcomingOffline = offlineSessions.filter(s => new Date(s.session_date) >= now)
+  const pastOffline = offlineSessions
+    .filter(s => new Date(s.session_date) < now)
+    .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
+  const visiblePastOffline = showAllPastOffline ? pastOffline : pastOffline.slice(0, PAST_VISIBLE)
+  const hiddenPastOfflineCount = Math.max(0, pastOffline.length - PAST_VISIBLE)
 
   return (
     <div className="space-y-6 pt-12 lg:pt-0 max-w-3xl mx-auto">
@@ -235,7 +255,7 @@ export default function OnlineStudySessionsPage() {
         <div>
           <h2 className="text-lg font-bold text-gray-800 mb-3">過去の勉強会</h2>
           <div className="space-y-3">
-            {past.map((session) => (
+            {visiblePast.map((session) => (
               <div key={session.id} className="bg-white/60 rounded-xl p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div>
@@ -251,6 +271,137 @@ export default function OnlineStudySessionsPage() {
               </div>
             ))}
           </div>
+          {hiddenPastCount > 0 && (
+            <button
+              onClick={() => setShowAllPast(v => !v)}
+              className="mt-3 inline-flex items-center gap-1.5 text-sm text-[#384a8f] hover:underline"
+            >
+              {showAllPast ? (
+                <>表示を折りたたむ <ChevronUp className="w-4 h-4" /></>
+              ) : (
+                <>過去の勉強会をすべて表示（あと{hiddenPastCount}件） <ChevronDown className="w-4 h-4" /></>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* リアル勉強会セクション（テスター限定） */}
+      {user?.is_tester && offlineSessions.length > 0 && (
+        <div className="pt-6 border-t-2 border-dashed border-gray-200 space-y-4">
+          <div className="flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-emerald-700" />
+            <h2 className="text-lg font-bold text-emerald-700">リアル勉強会</h2>
+            <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-medium">テスター限定</span>
+          </div>
+
+          <div>
+            <h3 className="text-base font-bold text-gray-800 mb-3">今後の勉強会</h3>
+            {upcomingOffline.length === 0 ? (
+              <div className="bg-white rounded-xl p-6 shadow-sm text-center text-gray-500">現在予定されている勉強会はありません</div>
+            ) : (
+              <div className="space-y-4">
+                {upcomingOffline.map((session) => {
+                  const att = attendance[session.id]
+                  return (
+                    <div key={session.id} className="bg-white rounded-xl p-6 shadow-sm">
+                      <div className="mb-4">
+                        <h3 className="font-bold text-gray-800 text-lg">{session.title}</h3>
+                        <div className="flex items-center gap-4 mt-2 text-sm text-gray-500 flex-wrap">
+                          <span className="flex items-center gap-1"><CalendarDays className="w-4 h-4" />{formatDateWithWeekday(session.session_date)}</span>
+                          {session.session_time && <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{session.session_time}</span>}
+                          {session.location && <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{session.location}</span>}
+                        </div>
+                      </div>
+                      {session.description && <p className="text-gray-600 text-sm mb-4">{session.description}</p>}
+                      <div className="border-t pt-4">
+                        {att && (
+                          <div className="mb-3 flex items-center gap-2">
+                            <span className={`inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium ${
+                              att.status === 'attending' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            }`}>
+                              {att.status === 'attending' ? (
+                                <><CheckCircle2 className="w-4 h-4" /> 出席で登録済み</>
+                              ) : (
+                                <><XCircle className="w-4 h-4" /> 欠席で登録済み</>
+                              )}
+                            </span>
+                          </div>
+                        )}
+                        <p className="text-sm font-medium text-gray-700 mb-3">出欠回答</p>
+                        <div className="flex gap-3">
+                          <button onClick={() => handleAttendance(session.id, 'attending')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium transition-colors ${
+                              att?.status === 'attending' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700 hover:bg-green-100'
+                            }`}>
+                            <CheckCircle2 className="w-5 h-5" /> 出席
+                          </button>
+                          <button onClick={() => handleAttendance(session.id, 'absent')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-medium transition-colors ${
+                              att?.status === 'absent' ? 'bg-red-600 text-white' : 'bg-red-50 text-red-700 hover:bg-red-100'
+                            }`}>
+                            <XCircle className="w-5 h-5" /> 欠席
+                          </button>
+                        </div>
+                        {!att && (
+                          <p className="text-xs text-orange-600 mt-2 flex items-center gap-1">
+                            <HelpCircle className="w-3 h-3" /> まだ出欠を回答していません
+                          </p>
+                        )}
+                        {att && (
+                          <div className="mt-3">
+                            <label className="text-xs text-gray-500 mb-1 block">備考（途中参加・遅刻等）</label>
+                            <input
+                              type="text"
+                              placeholder="例：30分遅れて参加します"
+                              defaultValue={att.notes || ''}
+                              onBlur={(e) => handleNotesUpdate(session.id, e.target.value)}
+                              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#384a8f] focus:border-transparent outline-none"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {pastOffline.length > 0 && (
+            <div>
+              <h3 className="text-base font-bold text-gray-800 mb-3">過去の勉強会</h3>
+              <div className="space-y-3">
+                {visiblePastOffline.map((session) => (
+                  <div key={session.id} className="bg-white/60 rounded-xl p-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-medium text-gray-600">{session.title}</h3>
+                        <p className="text-sm text-gray-400">{formatDateWithWeekday(session.session_date)}</p>
+                      </div>
+                      {attendance[session.id] && (
+                        <span className={`text-sm px-2 py-1 rounded ${
+                          attendance[session.id].status === 'attending' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                        }`}>{attendance[session.id].status === 'attending' ? '出席' : '欠席'}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {hiddenPastOfflineCount > 0 && (
+                <button
+                  onClick={() => setShowAllPastOffline(v => !v)}
+                  className="mt-3 inline-flex items-center gap-1.5 text-sm text-[#384a8f] hover:underline"
+                >
+                  {showAllPastOffline ? (
+                    <>表示を折りたたむ <ChevronUp className="w-4 h-4" /></>
+                  ) : (
+                    <>過去の勉強会をすべて表示（あと{hiddenPastOfflineCount}件） <ChevronDown className="w-4 h-4" /></>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
