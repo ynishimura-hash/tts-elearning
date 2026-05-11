@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Search, Eye, Edit, Save, X, Shield, ShieldOff, Trash2, ChevronDown, ChevronUp, CheckCircle2, Circle, KeyRound, Sparkles } from 'lucide-react'
-import { formatDate, daysSince } from '@/lib/utils'
+import { formatDate, formatDateTime, daysSince } from '@/lib/utils'
 import { ProgressBar } from '@/components/ProgressBar'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
 import type { User } from '@/types/database'
@@ -473,6 +473,7 @@ export default function AdminUsersPage() {
               <div><span className="text-gray-500">マイルール許可:</span> <span className="font-medium">{selectedUser.myrule_permitted ? 'あり' : 'なし'}</span></div>
               <div><span className="text-gray-500">休学:</span> <span className={`font-medium ${selectedUser.is_on_leave ? 'text-amber-700' : ''}`}>{selectedUser.is_on_leave ? '休学中' : '-'}</span></div>
               <div><span className="text-gray-500">期限日:</span> <span className={`font-medium ${selectedUser.withdrew_at && new Date(selectedUser.withdrew_at) <= new Date() ? 'text-rose-700' : ''}`}>{selectedUser.withdrew_at ? formatDate(selectedUser.withdrew_at) : '-'}</span></div>
+              <div className="col-span-2"><span className="text-gray-500">最終ログイン:</span> <span className="font-medium">{selectedUser.last_login_at ? formatDateTime(selectedUser.last_login_at) : '未ログイン'}</span></div>
               <div className="col-span-2"><span className="text-gray-500">最終学習コンテンツ:</span> <span className="font-medium">{selectedUser.last_content || '-'}</span></div>
               {selectedUser.drive_folder_url && (
                 <div className="col-span-2"><span className="text-gray-500">Driveフォルダ:</span> <a href={selectedUser.drive_folder_url} target="_blank" rel="noopener noreferrer" className="text-[#384a8f] hover:underline font-medium ml-1">開く</a></div>

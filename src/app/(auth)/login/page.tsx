@@ -55,7 +55,7 @@ export default function LoginPage() {
       // 最終ログイン更新
       await supabase
         .from('users')
-        .update({ updated_at: new Date().toISOString() })
+        .update({ last_login_at: new Date().toISOString() })
         .eq('auth_id', user.id)
 
       if (profile.is_admin) {

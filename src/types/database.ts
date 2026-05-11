@@ -36,6 +36,7 @@ export interface User {
   last_payment_at?: string | null
   last_payment_amount?: number | null
   last_payment_transaction_id?: string | null
+  last_login_at?: string | null
 }
 
 export interface Course {
