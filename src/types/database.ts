@@ -133,6 +133,7 @@ export interface Announcement {
   link_url: string | null
   image_url: string | null
   is_online: boolean
+  study_session_id: string | null
   created_at: string
   updated_at: string
 }
@@ -148,6 +149,8 @@ export interface StudySession {
   description: string | null
   max_participants: number | null
   reminder_sent: boolean
+  auto_notify_enabled: boolean
+  two_week_notify_sent_at: string | null
   created_at: string
   updated_at: string
 }

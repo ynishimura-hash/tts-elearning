@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin, Edit, Save, X, Send, Bell, Copy } from 'lucide-react'
+import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin, Edit, Save, X, Send, Bell, Copy, Zap } from 'lucide-react'
 import { formatDate, formatDateWithWeekday } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance, User } from '@/types/database'
 
@@ -102,8 +102,30 @@ export default function AdminStudySessionsPage() {
       const { error } = await supabase.from('study_sessions').update(payload).eq('id', editingId)
       if (error) { alert('更新に失敗しました: ' + error.message); return }
     } else {
-      const { error } = await supabase.from('study_sessions').insert(payload)
-      if (error) { alert('作成に失敗しました: ' + error.message); return }
+      const { data: created, error } = await supabase.from('study_sessions').insert(payload).select('id').single()
+      if (error || !created) { alert('作成に失敗しました: ' + (error?.message || '不明なエラー')); return }
+
+      // 新規作成時のみ、お知らせを自動生成
+      const sessionDate = new Date(form.session_date)
+      const month = sessionDate.getMonth() + 1
+      const day = sessionDate.getDate()
+      const timeLabel = form.session_time ? `の${form.session_time}` : ''
+      const annTitle = form.is_online
+        ? `勉強会の日程が${month}月${day}日${timeLabel}に決まりました！`
+        : `${month}月の勉強会の日程が決まりました！`
+      const annLink = form.is_online ? '/online/study-sessions' : '/study-sessions'
+      const { error: annError } = await supabase.from('announcements').insert({
+        title: annTitle,
+        link_url: annLink,
+        image_url: null,
+        is_online: form.is_online,
+        study_session_id: created.id,
+      })
+      if (annError) {
+        console.error('お知らせ自動生成に失敗:', annError)
+        // お知らせの失敗は致命的でないため alert で警告のみ
+        alert('勉強会は作成しましたが、お知らせの自動生成に失敗しました: ' + annError.message)
+      }
     }
 
     setShowForm(false)
@@ -172,6 +194,19 @@ export default function AdminStudySessionsPage() {
     } catch {
       alert('リマインダー送信に失敗しました')
     }
+  }
+
+  async function toggleAutoNotify(sessionId: string, current: boolean) {
+    const supabase = createClient()
+    const { error } = await supabase
+      .from('study_sessions')
+      .update({ auto_notify_enabled: !current })
+      .eq('id', sessionId)
+    if (error) {
+      alert('更新に失敗しました: ' + error.message)
+      return
+    }
+    fetchData()
   }
 
   const filtered = sessions.filter(s => {
@@ -297,6 +332,11 @@ export default function AdminStudySessionsPage() {
                         {session.is_online ? 'オンライン' : '対面'}
                       </span>
                       {isPast && <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded">終了</span>}
+                      {session.two_week_notify_sent_at && (
+                        <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 inline-flex items-center gap-1" title={`配信日時: ${formatDate(session.two_week_notify_sent_at)}`}>
+                          <Zap className="w-3 h-3" />2週間前配信済み
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
                       <span className="flex items-center gap-1"><CalendarDays className="w-4 h-4" />{formatDateWithWeekday(session.session_date)}</span>
@@ -374,6 +414,32 @@ export default function AdminStudySessionsPage() {
                     <p className="text-xl font-bold text-gray-800">{pending.length}</p>
                   </div>
                 </div>
+
+                {/* 2週間前自動配信トグル */}
+                {!isPast && (
+                  <div className="mt-3 flex items-center justify-between bg-blue-50 border border-blue-100 rounded-lg px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm font-medium text-gray-700">2週間前にLINEで自動配信</span>
+                      {session.two_week_notify_sent_at && (
+                        <span className="text-xs text-blue-700">（{formatDate(session.two_week_notify_sent_at)} に配信済み）</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => toggleAutoNotify(session.id, session.auto_notify_enabled)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        session.auto_notify_enabled ? 'bg-[#384a8f]' : 'bg-gray-300'
+                      }`}
+                      role="switch"
+                      aria-checked={session.auto_notify_enabled}
+                      title={session.auto_notify_enabled ? 'OFFにする' : 'ONにする'}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        session.auto_notify_enabled ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
+                    </button>
+                  </div>
+                )}
 
                 {/* 詳細展開 */}
                 {attendance.length > 0 && (
