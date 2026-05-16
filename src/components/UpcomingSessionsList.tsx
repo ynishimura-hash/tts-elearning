@@ -41,37 +41,38 @@ export function UpcomingSessionsList({
             return (
               <div
                 key={session.id}
-                className="border border-gray-100 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                className="border border-gray-100 rounded-lg px-3 py-2 hover:bg-gray-50 transition-colors"
               >
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded font-medium ${
-                        session.is_online
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'bg-emerald-100 text-emerald-700'
-                      }`}
-                    >
-                      {session.is_online ? 'オンライン' : 'リアル'}
+                {/* 1段目: ラベル + タイトル + ステータス */}
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span
+                    className={`text-[11px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${
+                      session.is_online
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-emerald-100 text-emerald-700'
+                    }`}
+                  >
+                    {session.is_online ? 'オンライン' : 'リアル'}
+                  </span>
+                  <p className="font-medium text-gray-800 text-sm flex-1 min-w-0 truncate">
+                    {session.title}
+                  </p>
+                  {!att ? (
+                    <span className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-medium flex-shrink-0">
+                      <AlertCircle className="w-3 h-3" />未回答
                     </span>
-                    {!att ? (
-                      <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-medium">
-                        <AlertCircle className="w-3 h-3" />未回答
-                      </span>
-                    ) : att.status === 'attending' ? (
-                      <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium">
-                        <CheckCircle2 className="w-3 h-3" />出席
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">
-                        <XCircle className="w-3 h-3" />欠席
-                      </span>
-                    )}
-                  </div>
+                  ) : att.status === 'attending' ? (
+                    <span className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium flex-shrink-0">
+                      <CheckCircle2 className="w-3 h-3" />出席
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium flex-shrink-0">
+                      <XCircle className="w-3 h-3" />欠席
+                    </span>
+                  )}
                 </div>
 
-                <p className="font-medium text-gray-800 text-sm mb-1">{session.title}</p>
-
+                {/* 2段目: 日時・場所・Zoom */}
                 <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
                   <span className="flex items-center gap-0.5">
                     <CalendarDays className="w-3 h-3" />
