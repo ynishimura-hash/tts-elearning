@@ -16,14 +16,14 @@ type NavItem = {
   href: string
   label: string
   icon: React.ElementType
-  badgeKey?: 'peakBottomPending' | 'applicationsPending' | 'paymentsPending'
+  badgeKey?: 'peakBottomPending' | 'applicationsPending' | 'paymentsPending' | 'studySessionsUnanswered'
 }
 
 const navItems: Record<NavMode, NavItem[]> = {
   offline: [
     { href: '/home', label: 'ホーム', icon: Home },
     { href: '/courses', label: 'コース一覧', icon: BookOpen },
-    { href: '/study-sessions', label: '勉強会', icon: CalendarDays },
+    { href: '/study-sessions', label: '勉強会', icon: CalendarDays, badgeKey: 'studySessionsUnanswered' },
     { href: '/tools', label: '検証ツール', icon: Wrench },
     { href: '/questions', label: '質問受付', icon: MessageSquare },
     { href: '/consultation', label: '個別相談', icon: Users },
@@ -34,7 +34,7 @@ const navItems: Record<NavMode, NavItem[]> = {
   online: [
     { href: '/online/home', label: 'ホーム', icon: Home },
     { href: '/online/courses', label: 'コース一覧', icon: BookOpen },
-    { href: '/online/study-sessions', label: '勉強会', icon: CalendarDays },
+    { href: '/online/study-sessions', label: '勉強会', icon: CalendarDays, badgeKey: 'studySessionsUnanswered' },
     { href: '/online/tools', label: '検証ツール', icon: Wrench },
     { href: '/online/questions', label: '質問受付', icon: MessageSquare },
     { href: '/online/consultation', label: '個別相談', icon: Users },
@@ -67,12 +67,18 @@ type Badges = {
   peakBottomPending: number
   applicationsPending: number
   paymentsPending: number
+  studySessionsUnanswered: number
 }
 
 export function Navigation({ mode }: { mode: NavMode }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [badges, setBadges] = useState<Badges>({ peakBottomPending: 0, applicationsPending: 0, paymentsPending: 0 })
+  const [badges, setBadges] = useState<Badges>({
+    peakBottomPending: 0,
+    applicationsPending: 0,
+    paymentsPending: 0,
+    studySessionsUnanswered: 0,
+  })
   const items = navItems[mode]
 
   // 管理者用バッジ件数を取得（30秒ごと再取得）
@@ -88,15 +94,73 @@ export function Navigation({ mode }: { mode: NavMode }) {
         supabase.from('applications').select('id', { count: 'exact', head: true }).eq('payment_status', 'unpaid'),
       ])
       if (cancelled) return
-      setBadges({
+      setBadges(b => ({
+        ...b,
         peakBottomPending: pb.count || 0,
         applicationsPending: unpaid.count || 0,
-        paymentsPending: 0,
-      })
+      }))
     }
 
     fetchBadges()
     const timer = setInterval(fetchBadges, 30_000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [mode])
+
+  // 受講生用: 未回答勉強会バッジ件数を取得（60秒ごと再取得）
+  useEffect(() => {
+    if (mode !== 'online' && mode !== 'offline') return
+    const supabase = createClient()
+    let cancelled = false
+
+    async function fetchStudySessionBadge() {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) return
+
+      const { data: profile } = await supabase
+        .from('users')
+        .select('id, is_tester')
+        .eq('auth_id', authUser.id)
+        .single()
+      if (!profile) return
+
+      // 今後の勉強会取得（テスター=リアル含む全件、それ以外はモードに応じて）
+      const isOnlineMode = mode === 'online'
+      let sessionsQuery = supabase
+        .from('study_sessions')
+        .select('id')
+        .gte('session_date', new Date().toISOString())
+      if (isOnlineMode && !profile.is_tester) {
+        sessionsQuery = sessionsQuery.eq('is_online', true)
+      } else if (!isOnlineMode) {
+        sessionsQuery = sessionsQuery.eq('is_online', false)
+      }
+      const { data: sessions } = await sessionsQuery
+      if (cancelled || !sessions) return
+
+      // 回答済み（attending or absent）の attendance を取得
+      const sessionIds = sessions.map(s => s.id)
+      let answered = 0
+      if (sessionIds.length > 0) {
+        const { count } = await supabase
+          .from('study_session_attendance')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', profile.id)
+          .in('session_id', sessionIds)
+          .in('status', ['attending', 'absent'])
+        answered = count || 0
+      }
+
+      const unanswered = Math.max(0, sessions.length - answered)
+      if (!cancelled) {
+        setBadges(b => ({ ...b, studySessionsUnanswered: unanswered }))
+      }
+    }
+
+    fetchStudySessionBadge()
+    const timer = setInterval(fetchStudySessionBadge, 60_000)
     return () => {
       cancelled = true
       clearInterval(timer)
