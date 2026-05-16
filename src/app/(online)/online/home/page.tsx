@@ -5,15 +5,17 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { ProgressBar } from '@/components/ProgressBar'
-import { BookOpen, CalendarDays, TrendingUp, Bell, ChevronRight, Wifi } from 'lucide-react'
+import { BookOpen, CalendarDays, TrendingUp, Bell, ChevronRight, Wifi, CheckCircle2, XCircle, Clock, Video, AlertCircle, ExternalLink } from 'lucide-react'
 import { formatDate, formatDateWithWeekday, daysSince } from '@/lib/utils'
-import type { Course, StudySession, Announcement } from '@/types/database'
+import type { Course, StudySession, StudySessionAttendance, Announcement } from '@/types/database'
 
 export default function OnlineHomePage() {
   const { user, loading: userLoading } = useUser()
   const [courses, setCourses] = useState<Course[]>([])
   const [nextSession, setNextSession] = useState<StudySession | null>(null)
+  const [nextAttendance, setNextAttendance] = useState<StudySessionAttendance | null>(null)
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [hasMoreAnnouncements, setHasMoreAnnouncements] = useState(false)
   const [totalContents, setTotalContents] = useState(0)
   const [completedContents, setCompletedContents] = useState(0)
 
@@ -39,16 +41,28 @@ export default function OnlineHomePage() {
         .order('session_date')
         .limit(1)
 
-      if (sessions?.[0]) setNextSession(sessions[0])
+      if (sessions?.[0]) {
+        setNextSession(sessions[0])
+        const { data: att } = await supabase
+          .from('study_session_attendance')
+          .select('*')
+          .eq('session_id', sessions[0].id)
+          .eq('user_id', user!.id)
+          .maybeSingle()
+        if (att) setNextAttendance(att)
+      }
 
       const { data: anns } = await supabase
         .from('announcements')
         .select('*')
         .eq('is_online', true)
         .order('created_at', { ascending: false })
-        .limit(3)
+        .limit(4)
 
-      if (anns) setAnnouncements(anns)
+      if (anns) {
+        setAnnouncements(anns.slice(0, 3))
+        setHasMoreAnnouncements(anns.length > 3)
+      }
 
       const { count: total } = await supabase
         .from('contents')
@@ -108,21 +122,55 @@ export default function OnlineHomePage() {
         </div>
 
         <div className="bg-white rounded-xl p-5 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+          <div className="flex items-center gap-3 mb-1">
+            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
               <CalendarDays className="w-5 h-5 text-[#e39f3c]" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-gray-500">次のオンライン勉強会</p>
               <p className="text-sm font-bold">
                 {nextSession ? formatDateWithWeekday(nextSession.session_date) : '未定'}
               </p>
+              {nextSession?.session_time && (
+                <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                  <Clock className="w-3 h-3" />{nextSession.session_time}
+                </p>
+              )}
             </div>
           </div>
           {nextSession && (
-            <Link href="/online/study-sessions" className="mt-3 inline-flex items-center text-sm text-[#384a8f] hover:underline">
-              出欠を回答する <ChevronRight className="w-4 h-4" />
-            </Link>
+            <>
+              {/* ステータスバッジ */}
+              {!nextAttendance ? (
+                <div className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-orange-100 text-orange-700 font-medium">
+                  <AlertCircle className="w-3 h-3" />未回答
+                </div>
+              ) : nextAttendance.status === 'attending' ? (
+                <div className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-green-100 text-green-700 font-medium">
+                  <CheckCircle2 className="w-3 h-3" />出席で登録済み
+                </div>
+              ) : (
+                <div className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-red-100 text-red-700 font-medium">
+                  <XCircle className="w-3 h-3" />欠席で登録済み
+                </div>
+              )}
+
+              {/* 出席者のみZoom URLを表示 */}
+              {nextAttendance?.status === 'attending' && nextSession.zoom_url && (
+                <a
+                  href={nextSession.zoom_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 text-xs text-[#384a8f] hover:underline"
+                >
+                  <Video className="w-3 h-3" />Zoomで参加 <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+
+              <Link href="/online/study-sessions" className="mt-2 ml-2 inline-flex items-center text-xs text-[#384a8f] hover:underline">
+                {nextAttendance ? '変更する' : '出欠を回答する'} <ChevronRight className="w-3 h-3" />
+              </Link>
+            </>
           )}
         </div>
 
@@ -142,10 +190,17 @@ export default function OnlineHomePage() {
       {/* お知らせ */}
       {announcements.length > 0 && (
         <div className="bg-white rounded-xl p-5 shadow-sm">
-          <h2 className="flex items-center gap-2 text-lg font-bold text-[#384a8f] mb-4">
-            <Bell className="w-5 h-5" />
-            お知らせ
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="flex items-center gap-2 text-lg font-bold text-[#384a8f]">
+              <Bell className="w-5 h-5" />
+              お知らせ
+            </h2>
+            {hasMoreAnnouncements && (
+              <Link href="/online/announcements" className="text-sm text-[#384a8f] hover:underline">
+                すべて見る
+              </Link>
+            )}
+          </div>
           <div className="space-y-3">
             {announcements.map((ann) => (
               <a
