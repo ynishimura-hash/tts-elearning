@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, X } from 'lucide-react'
 import type { StudySession, StudySessionAttendance } from '@/types/database'
 
 interface StudySessionCalendarProps {
@@ -15,13 +15,19 @@ function ymd(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+function statusOf(att: StudySessionAttendance | undefined): 'attending' | 'absent' | 'none' {
+  if (!att) return 'none'
+  if (att.status === 'attending') return 'attending'
+  if (att.status === 'absent') return 'absent'
+  return 'none'
+}
+
 export function StudySessionCalendar({ sessions, attendance }: StudySessionCalendarProps) {
   const [cursor, setCursor] = useState<Date>(() => {
     const d = new Date()
     return new Date(d.getFullYear(), d.getMonth(), 1)
   })
 
-  // 日付 → 勉強会リスト
   const sessionsByDate = useMemo(() => {
     const map: Record<string, StudySession[]> = {}
     for (const s of sessions) {
@@ -32,7 +38,6 @@ export function StudySessionCalendar({ sessions, attendance }: StudySessionCalen
     return map
   }, [sessions])
 
-  // カレンダー描画
   const year = cursor.getFullYear()
   const month = cursor.getMonth()
   const firstDay = new Date(year, month, 1)
@@ -58,21 +63,13 @@ export function StudySessionCalendar({ sessions, attendance }: StudySessionCalen
   return (
     <div className="bg-white rounded-xl p-5 shadow-sm">
       <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={prevMonth}
-          className="p-1 rounded hover:bg-gray-100 transition-colors"
-          aria-label="前月"
-        >
+        <button onClick={prevMonth} className="p-1 rounded hover:bg-gray-100 transition-colors" aria-label="前月">
           <ChevronLeft className="w-5 h-5 text-gray-600" />
         </button>
         <h3 className="text-base font-bold text-gray-800">
           {year}年 {month + 1}月
         </h3>
-        <button
-          onClick={nextMonth}
-          className="p-1 rounded hover:bg-gray-100 transition-colors"
-          aria-label="次月"
-        >
+        <button onClick={nextMonth} className="p-1 rounded hover:bg-gray-100 transition-colors" aria-label="次月">
           <ChevronRight className="w-5 h-5 text-gray-600" />
         </button>
       </div>
@@ -92,30 +89,22 @@ export function StudySessionCalendar({ sessions, attendance }: StudySessionCalen
 
       <div className="grid grid-cols-7 gap-1">
         {cells.map((d, idx) => {
-          if (!d) return <div key={idx} className="aspect-square" />
+          if (!d) return <div key={idx} className="min-h-[3.5rem]" />
           const key = ymd(d)
           const daySessions = sessionsByDate[key] || []
           const isToday = key === todayKey
           const dow = d.getDay()
-          const hasOnline = daySessions.some(s => s.is_online)
-          const hasOffline = daySessions.some(s => !s.is_online)
-
-          // 出欠状態の集約
-          const myAttendances = daySessions
-            .map(s => attendance[s.id])
-            .filter(Boolean)
-          const hasAttending = myAttendances.some(a => a?.status === 'attending')
 
           return (
             <div
               key={idx}
-              className={`aspect-square flex flex-col items-center justify-start p-1 rounded relative ${
+              className={`min-h-[3.5rem] flex flex-col items-stretch p-1 rounded relative ${
                 isToday ? 'bg-[#384a8f]/10 ring-1 ring-[#384a8f]/30' : ''
               }`}
-              title={daySessions.map(s => `${s.title}${s.session_time ? ' ' + s.session_time : ''}`).join('\n')}
+              title={daySessions.map(s => `${s.is_online ? '[オンライン]' : '[リアル]'} ${s.title}${s.session_time ? ' ' + s.session_time : ''}`).join('\n')}
             >
               <span
-                className={`text-xs ${
+                className={`text-xs text-center ${
                   isToday
                     ? 'font-bold text-[#384a8f]'
                     : dow === 0
@@ -127,20 +116,36 @@ export function StudySessionCalendar({ sessions, attendance }: StudySessionCalen
               >
                 {d.getDate()}
               </span>
+
               {daySessions.length > 0 && (
-                <div className="flex gap-0.5 mt-0.5 flex-wrap justify-center">
-                  {hasOnline && (
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${hasAttending ? 'bg-green-500' : 'bg-purple-500'}`}
-                      title="オンライン"
-                    />
-                  )}
-                  {hasOffline && (
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${hasAttending ? 'bg-green-500' : 'bg-emerald-600'}`}
-                      title="リアル"
-                    />
-                  )}
+                <div className="flex flex-col gap-0.5 mt-0.5">
+                  {daySessions.map((s) => {
+                    const att = attendance[s.id]
+                    const status = statusOf(att)
+                    const baseColor = s.is_online ? 'purple' : 'emerald'
+                    const label = s.is_online ? 'オン' : 'リアル'
+
+                    // 出席/欠席に応じて色変更
+                    const bgClass =
+                      status === 'attending'
+                        ? 'bg-green-100 text-green-700 ring-1 ring-green-300'
+                        : status === 'absent'
+                        ? 'bg-red-50 text-red-600 ring-1 ring-red-200 opacity-80'
+                        : baseColor === 'purple'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-emerald-100 text-emerald-700'
+
+                    return (
+                      <div
+                        key={s.id}
+                        className={`text-[10px] leading-none px-1 py-0.5 rounded flex items-center justify-center gap-0.5 ${bgClass}`}
+                      >
+                        {status === 'attending' && <Check className="w-2.5 h-2.5 flex-shrink-0" />}
+                        {status === 'absent' && <X className="w-2.5 h-2.5 flex-shrink-0" />}
+                        <span className="truncate">{label}</span>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -149,16 +154,21 @@ export function StudySessionCalendar({ sessions, attendance }: StudySessionCalen
       </div>
 
       {/* 凡例 */}
-      <div className="mt-4 flex items-center gap-3 text-xs text-gray-500 flex-wrap">
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-purple-500" />オンライン
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-emerald-600" />リアル
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-green-500" />出席登録済み
-        </span>
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-gray-600">
+        <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+          オン
+          <span className="text-gray-500 ml-0.5">=オンライン</span>
+        </div>
+        <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
+          リアル
+          <span className="text-gray-500 ml-0.5">=対面</span>
+        </div>
+        <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+          <Check className="w-3 h-3" />=出席
+        </div>
+        <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 text-red-600">
+          <X className="w-3 h-3" />=欠席
+        </div>
       </div>
     </div>
   )
