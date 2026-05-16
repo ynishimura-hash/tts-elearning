@@ -358,7 +358,7 @@ export default function HomePage() {
             <h2 className="text-lg font-bold text-gray-800">コース一覧</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {courses.slice(0, 6).map((course, i) => {
+            {courses.slice(0, 4).map((course, i) => {
               const cp = courseProgress.find(p => p.name === course.name)
               const pct = cp && cp.total > 0 ? Math.round((cp.done / cp.total) * 100) : 0
 

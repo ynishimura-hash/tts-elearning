@@ -140,16 +140,15 @@ export default function OnlineHomePage() {
 
   return (
     <div className="space-y-6 pt-12 lg:pt-0">
-      {/* ヘッダー */}
-      <div className="bg-gradient-to-r from-[#384a8f] to-[#4a5ea8] rounded-2xl p-6 text-white">
-        <div className="flex items-center gap-2 mb-1">
-          <Wifi className="w-4 h-4 text-[#e39f3c]" />
-          <span className="text-sm text-[#e39f3c] font-medium">オンライン受講</span>
-        </div>
-        <h1 className="text-2xl font-bold">
+      {/* ヘッダー（2段構成・余白タイト） */}
+      <div className="bg-gradient-to-r from-[#384a8f] to-[#4a5ea8] rounded-2xl px-6 py-4 text-white">
+        <h1 className="text-xl md:text-2xl font-bold flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-[#e39f3c]/20 text-[#e39f3c] font-medium">
+            <Wifi className="w-3 h-3" />オンライン受講
+          </span>
           おかえりなさい、{user?.full_name || user?.username}さん
         </h1>
-        <p className="text-white/70 text-sm mt-1">
+        <p className="text-white/70 text-xs md:text-sm mt-0.5">
           受講開始から {daysSince(user?.account_issued_at || null)} 日目
         </p>
       </div>
@@ -289,13 +288,13 @@ export default function OnlineHomePage() {
         </div>
       )}
 
-      {/* コース一覧 */}
+      {/* コース一覧（2行まで） */}
       <div>
         <div className="mb-4">
           <h2 className="text-lg font-bold text-gray-800">コース一覧</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {courses.slice(0, 6).map((course) => (
+          {courses.slice(0, 4).map((course) => (
             <Link
               key={course.id}
               href={`/online/courses/${course.id}`}
