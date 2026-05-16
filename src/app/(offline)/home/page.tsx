@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { ProgressBar } from '@/components/ProgressBar'
+import { StudySessionCalendar } from '@/components/StudySessionCalendar'
+import { UpcomingSessionsList } from '@/components/UpcomingSessionsList'
 import { BookOpen, CalendarDays, TrendingUp, Bell, ChevronRight, CheckCircle2, XCircle, Clock, MapPin, AlertCircle } from 'lucide-react'
 import { formatDate, formatDateWithWeekday, daysSince } from '@/lib/utils'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
@@ -17,6 +19,8 @@ export default function HomePage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [nextSession, setNextSession] = useState<StudySession | null>(null)
   const [nextAttendance, setNextAttendance] = useState<StudySessionAttendance | null>(null)
+  const [allSessions, setAllSessions] = useState<StudySession[]>([])
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, StudySessionAttendance>>({})
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [hasMoreAnnouncements, setHasMoreAnnouncements] = useState(false)
   const [totalContents, setTotalContents] = useState(0)
@@ -46,24 +50,39 @@ export default function HomePage() {
         setCourses(filtered)
       }
 
-      // 次の勉強会
-      const { data: sessions } = await supabase
+      // 勉強会（カレンダー用に前後数ヶ月の範囲を取得）
+      const now = new Date()
+      const rangeStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
+      const rangeEnd = new Date(now.getFullYear(), now.getMonth() + 6, 0).toISOString()
+
+      const { data: sessionsData } = await supabase
         .from('study_sessions')
         .select('*')
         .eq('is_online', false)
-        .gte('session_date', new Date().toISOString())
+        .gte('session_date', rangeStart)
+        .lte('session_date', rangeEnd)
         .order('session_date')
-        .limit(1)
 
-      if (sessions?.[0]) {
-        setNextSession(sessions[0])
-        const { data: att } = await supabase
-          .from('study_session_attendance')
-          .select('*')
-          .eq('session_id', sessions[0].id)
-          .eq('user_id', user!.id)
-          .maybeSingle()
-        if (att) setNextAttendance(att)
+      if (sessionsData) {
+        setAllSessions(sessionsData)
+        const nextOne = sessionsData.find(s => new Date(s.session_date) >= now)
+        if (nextOne) setNextSession(nextOne)
+
+        const sessionIds = sessionsData.map(s => s.id)
+        if (sessionIds.length > 0) {
+          const { data: attData } = await supabase
+            .from('study_session_attendance')
+            .select('*')
+            .eq('user_id', user!.id)
+            .in('session_id', sessionIds)
+
+          if (attData) {
+            const map: Record<string, StudySessionAttendance> = {}
+            attData.forEach(a => { map[a.session_id] = a })
+            setAttendanceMap(map)
+            if (nextOne && map[nextOne.id]) setNextAttendance(map[nextOne.id])
+          }
+        }
       }
 
       // お知らせ
@@ -223,6 +242,16 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 今後の勉強会: リスト + カレンダー */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <UpcomingSessionsList
+          sessions={allSessions}
+          attendance={attendanceMap}
+          linkHref="/study-sessions"
+        />
+        <StudySessionCalendar sessions={allSessions} attendance={attendanceMap} />
       </div>
 
       {/* お知らせ */}

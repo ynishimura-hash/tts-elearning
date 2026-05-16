@@ -5,7 +5,22 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { ProgressBar } from '@/components/ProgressBar'
-import { BookOpen, CalendarDays, TrendingUp, Bell, ChevronRight, Wifi, CheckCircle2, XCircle, Clock, Video, AlertCircle, ExternalLink, MapPin } from 'lucide-react'
+import { StudySessionCalendar } from '@/components/StudySessionCalendar'
+import { UpcomingSessionsList } from '@/components/UpcomingSessionsList'
+import {
+  BookOpen,
+  CalendarDays,
+  TrendingUp,
+  Bell,
+  ChevronRight,
+  Wifi,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Video,
+  AlertCircle,
+  ExternalLink,
+} from 'lucide-react'
 import { formatDate, formatDateWithWeekday, daysSince } from '@/lib/utils'
 import type { Course, StudySession, StudySessionAttendance, Announcement } from '@/types/database'
 
@@ -14,8 +29,8 @@ export default function OnlineHomePage() {
   const [courses, setCourses] = useState<Course[]>([])
   const [nextSession, setNextSession] = useState<StudySession | null>(null)
   const [nextAttendance, setNextAttendance] = useState<StudySessionAttendance | null>(null)
-  const [nextOfflineSession, setNextOfflineSession] = useState<StudySession | null>(null)
-  const [nextOfflineAttendance, setNextOfflineAttendance] = useState<StudySessionAttendance | null>(null)
+  const [allSessions, setAllSessions] = useState<StudySession[]>([])
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, StudySessionAttendance>>({})
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [hasMoreAnnouncements, setHasMoreAnnouncements] = useState(false)
   const [totalContents, setTotalContents] = useState(0)
@@ -35,44 +50,53 @@ export default function OnlineHomePage() {
 
       if (coursesData) setCourses(coursesData)
 
-      const { data: sessions } = await supabase
+      // 勉強会取得: 通常はオンラインのみ、テスターはリアルも含む
+      // 過去〜今後の前後3ヶ月のレンジを取得（カレンダー表示用）
+      const now = new Date()
+      const rangeStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
+      const rangeEnd = new Date(now.getFullYear(), now.getMonth() + 6, 0).toISOString()
+
+      const sessionsQuery = supabase
         .from('study_sessions')
         .select('*')
-        .eq('is_online', true)
-        .gte('session_date', new Date().toISOString())
+        .gte('session_date', rangeStart)
+        .lte('session_date', rangeEnd)
         .order('session_date')
-        .limit(1)
 
-      if (sessions?.[0]) {
-        setNextSession(sessions[0])
-        const { data: att } = await supabase
-          .from('study_session_attendance')
-          .select('*')
-          .eq('session_id', sessions[0].id)
-          .eq('user_id', user!.id)
-          .maybeSingle()
-        if (att) setNextAttendance(att)
-      }
+      const { data: sessionsData } = user!.is_tester
+        ? await sessionsQuery
+        : await sessionsQuery.eq('is_online', true)
 
-      // テスターは次のリアル勉強会も取得
-      if (user!.is_tester) {
-        const { data: offlineSessions } = await supabase
-          .from('study_sessions')
-          .select('*')
-          .eq('is_online', false)
-          .gte('session_date', new Date().toISOString())
-          .order('session_date')
-          .limit(1)
+      if (sessionsData) {
+        setAllSessions(sessionsData)
 
-        if (offlineSessions?.[0]) {
-          setNextOfflineSession(offlineSessions[0])
-          const { data: offAtt } = await supabase
+        // 次のオンライン勉強会（最新1件、カード表示用）
+        const nextOnline = sessionsData.find(
+          (s) => s.is_online && new Date(s.session_date) >= now
+        )
+        if (nextOnline) {
+          setNextSession(nextOnline)
+        }
+
+        // 出欠状況を一括取得
+        const sessionIds = sessionsData.map((s) => s.id)
+        if (sessionIds.length > 0) {
+          const { data: attData } = await supabase
             .from('study_session_attendance')
             .select('*')
-            .eq('session_id', offlineSessions[0].id)
             .eq('user_id', user!.id)
-            .maybeSingle()
-          if (offAtt) setNextOfflineAttendance(offAtt)
+            .in('session_id', sessionIds)
+
+          if (attData) {
+            const map: Record<string, StudySessionAttendance> = {}
+            attData.forEach((a) => {
+              map[a.session_id] = a
+            })
+            setAttendanceMap(map)
+            if (nextOnline && map[nextOnline.id]) {
+              setNextAttendance(map[nextOnline.id])
+            }
+          }
         }
       }
 
@@ -139,7 +163,9 @@ export default function OnlineHomePage() {
             </div>
             <div>
               <p className="text-sm text-gray-500">学習進捗</p>
-              <p className="text-xl font-bold text-[#384a8f]">{completedContents}/{totalContents}</p>
+              <p className="text-xl font-bold text-[#384a8f]">
+                {completedContents}/{totalContents}
+              </p>
             </div>
           </div>
           <ProgressBar value={completedContents} max={totalContents} />
@@ -157,7 +183,8 @@ export default function OnlineHomePage() {
               </p>
               {nextSession?.session_time && (
                 <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                  <Clock className="w-3 h-3" />{nextSession.session_time}
+                  <Clock className="w-3 h-3" />
+                  {nextSession.session_time}
                 </p>
               )}
             </div>
@@ -167,15 +194,18 @@ export default function OnlineHomePage() {
               {/* ステータスバッジ */}
               {!nextAttendance ? (
                 <div className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-orange-100 text-orange-700 font-medium">
-                  <AlertCircle className="w-3 h-3" />未回答
+                  <AlertCircle className="w-3 h-3" />
+                  未回答
                 </div>
               ) : nextAttendance.status === 'attending' ? (
                 <div className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-green-100 text-green-700 font-medium">
-                  <CheckCircle2 className="w-3 h-3" />出席で登録済み
+                  <CheckCircle2 className="w-3 h-3" />
+                  出席で登録済み
                 </div>
               ) : (
                 <div className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-red-100 text-red-700 font-medium">
-                  <XCircle className="w-3 h-3" />欠席で登録済み
+                  <XCircle className="w-3 h-3" />
+                  欠席で登録済み
                 </div>
               )}
 
@@ -187,11 +217,15 @@ export default function OnlineHomePage() {
                   rel="noopener noreferrer"
                   className="mt-2 inline-flex items-center gap-1 text-xs text-[#384a8f] hover:underline"
                 >
-                  <Video className="w-3 h-3" />Zoomで参加 <ExternalLink className="w-3 h-3" />
+                  <Video className="w-3 h-3" />
+                  Zoomで参加 <ExternalLink className="w-3 h-3" />
                 </a>
               )}
 
-              <Link href="/online/study-sessions" className="mt-2 ml-2 inline-flex items-center text-xs text-[#384a8f] hover:underline">
+              <Link
+                href="/online/study-sessions"
+                className="mt-2 ml-2 inline-flex items-center text-xs text-[#384a8f] hover:underline"
+              >
                 {nextAttendance ? '変更する' : '出欠を回答する'} <ChevronRight className="w-3 h-3" />
               </Link>
             </>
@@ -211,54 +245,15 @@ export default function OnlineHomePage() {
         </div>
       </div>
 
-      {/* テスター限定: 次のリアル勉強会カード */}
-      {user?.is_tester && nextOfflineSession && (
-        <div className="bg-white rounded-xl p-5 shadow-sm border-2 border-emerald-200">
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
-              <MapPin className="w-5 h-5 text-emerald-700" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-sm text-gray-500">次のリアル勉強会</p>
-                <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 font-medium">テスター限定</span>
-              </div>
-              <p className="text-sm font-bold">{formatDateWithWeekday(nextOfflineSession.session_date)}</p>
-              <div className="flex flex-wrap items-center gap-3 mt-0.5">
-                {nextOfflineSession.session_time && (
-                  <p className="text-xs text-gray-500 flex items-center gap-1">
-                    <Clock className="w-3 h-3" />{nextOfflineSession.session_time}
-                  </p>
-                )}
-                {nextOfflineSession.location && (
-                  <p className="text-xs text-gray-500 flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />{nextOfflineSession.location}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ステータスバッジ */}
-          {!nextOfflineAttendance ? (
-            <div className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-orange-100 text-orange-700 font-medium">
-              <AlertCircle className="w-3 h-3" />未回答
-            </div>
-          ) : nextOfflineAttendance.status === 'attending' ? (
-            <div className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-green-100 text-green-700 font-medium">
-              <CheckCircle2 className="w-3 h-3" />出席で登録済み
-            </div>
-          ) : (
-            <div className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-red-100 text-red-700 font-medium">
-              <XCircle className="w-3 h-3" />欠席で登録済み
-            </div>
-          )}
-
-          <Link href="/online/study-sessions" className="mt-2 ml-2 inline-flex items-center text-xs text-[#384a8f] hover:underline">
-            {nextOfflineAttendance ? '変更する' : '出欠を回答する'} <ChevronRight className="w-3 h-3" />
-          </Link>
-        </div>
-      )}
+      {/* 今後の勉強会: リスト + カレンダー */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <UpcomingSessionsList
+          sessions={allSessions}
+          attendance={attendanceMap}
+          linkHref="/online/study-sessions"
+        />
+        <StudySessionCalendar sessions={allSessions} attendance={attendanceMap} />
+      </div>
 
       {/* お知らせ */}
       {announcements.length > 0 && (
