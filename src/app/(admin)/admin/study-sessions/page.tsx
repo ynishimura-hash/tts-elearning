@@ -6,9 +6,12 @@ import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin
 import { formatDate, formatDateWithWeekday } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance, User } from '@/types/database'
 
+type EligibleUser = Pick<User, 'id' | 'full_name' | 'email' | 'is_online' | 'is_admin' | 'is_test' | 'is_free_user' | 'is_tester'>
+
 export default function AdminStudySessionsPage() {
   const [sessions, setSessions] = useState<StudySession[]>([])
   const [attendanceMap, setAttendanceMap] = useState<Record<string, (StudySessionAttendance & { user?: User })[]>>({})
+  const [users, setUsers] = useState<EligibleUser[]>([])
   const [filter, setFilter] = useState<'all' | 'online' | 'offline' | 'upcoming' | 'past'>('all')
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -31,9 +34,10 @@ export default function AdminStudySessionsPage() {
     const { data: allAttendance } = await supabase
       .from('study_session_attendance').select('*')
     const { data: allUsers } = await supabase
-      .from('users').select('id, full_name, email, is_online')
+      .from('users').select('id, full_name, email, is_online, is_admin, is_test, is_free_user, is_tester')
 
     if (allAttendance && allUsers) {
+      setUsers(allUsers as EligibleUser[])
       const userMap: Record<string, User> = {}
       allUsers.forEach(u => { userMap[u.id] = u as User })
 
@@ -44,6 +48,18 @@ export default function AdminStudySessionsPage() {
       })
       setAttendanceMap(map)
     }
+  }
+
+  /** セッションごとの対象ユーザーを計算 */
+  function getEligibleUsers(session: StudySession): EligibleUser[] {
+    return users.filter(u => {
+      if (u.is_admin) return false
+      if (u.is_test) return false
+      if (u.is_free_user) return false
+      // オンライン勉強会 → オンライン受講生
+      // 対面勉強会 → 対面受講生（テスターは任意参加なので未回答対象に含めない）
+      return session.is_online ? u.is_online : !u.is_online
+    })
   }
 
   function startNew() {
@@ -314,10 +330,16 @@ export default function AdminStudySessionsPage() {
       <div className="space-y-4">
         {filtered.map((session) => {
           const attendance = attendanceMap[session.id] || []
-          const attending = attendance.filter(a => a.status === 'attending')
-          const absent = attendance.filter(a => a.status === 'absent')
-          const pending = attendance.filter(a => a.status === 'pending')
-          const undecided = attendance.filter(a => a.status === 'undecided')
+          const eligibleUsers = getEligibleUsers(session)
+          const eligibleIds = new Set(eligibleUsers.map(u => u.id))
+          // 対象ユーザーの中で集計（テスターや管理者・テストアカウントは除外）
+          const eligibleAttendance = attendance.filter(a => eligibleIds.has(a.user_id))
+          const attending = eligibleAttendance.filter(a => a.status === 'attending')
+          const absent = eligibleAttendance.filter(a => a.status === 'absent')
+          const undecided = eligibleAttendance.filter(a => a.status === 'undecided')
+          // 未回答 = 対象ユーザー数 - (出席 + 欠席 + 未定)
+          // ※ レコード自体がない人もカウントされる
+          const pendingCount = Math.max(0, eligibleUsers.length - attending.length - absent.length - undecided.length)
           const isPast = new Date(session.session_date) < new Date()
           const isExpanded = expandedSession === session.id
 
@@ -357,13 +379,13 @@ export default function AdminStudySessionsPage() {
                           <Send className="w-3.5 h-3.5" />
                           {sendingSession === session.id ? '送信中...' : '出欠案内'}
                         </button>
-                        {pending.length > 0 && (
+                        {pendingCount > 0 && (
                           <button onClick={() => sendReminder(session.id)}
                             disabled={sendingSession === session.id}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 transition-colors disabled:opacity-50"
                             title="未回答者に催促">
                             <Bell className="w-3.5 h-3.5" />
-                            催促({pending.length})
+                            催促({pendingCount})
                           </button>
                         )}
                       </>
@@ -411,7 +433,7 @@ export default function AdminStudySessionsPage() {
                       <Clock className="w-4 h-4" />
                       <span className="text-sm font-medium">未回答</span>
                     </div>
-                    <p className="text-xl font-bold text-gray-800">{pending.length}</p>
+                    <p className="text-xl font-bold text-gray-800">{pendingCount}</p>
                   </div>
                 </div>
 
