@@ -224,46 +224,50 @@ export default function AdminApplicationsPage() {
       </div>
 
       {/* 受付状態トグル */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Power className="w-4 h-4 text-gray-600" />
-          <p className="text-sm font-medium text-gray-700">申し込み受付状態</p>
+      <div className="bg-white border border-gray-200 rounded-xl p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Power className="w-4 h-4 text-gray-600" />
+            <p className="text-sm font-medium text-gray-700">申し込み受付状態</p>
+          </div>
+          <p className="text-[11px] text-gray-500">
+            停止中は申込フォームが「空き待ちフォーム」に切替わります
+          </p>
         </div>
-        <p className="text-xs text-gray-500">
-          停止中は、申込フォームが「空き待ちフォーム」に切り替わります。受付再開後、管理画面（空き待ち一覧）から個別に招待を送信できます。
-        </p>
-        {(['online', 'offline'] as const).map((ct) => {
-          const paused = ct === 'online' ? !!settings?.online_paused : !!settings?.offline_paused
-          const label = ct === 'online' ? 'オンライン受講' : '対面受講'
-          const labelColor = ct === 'online' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
-          return (
-            <div key={ct} className="flex items-center justify-between gap-2 flex-wrap p-3 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`text-xs px-2 py-1 rounded font-medium ${labelColor}`}>{label}</span>
-                {paused ? (
-                  <span className="inline-flex items-center gap-1 text-sm font-medium text-amber-700">
-                    <Pause className="w-4 h-4" />
-                    停止中（空き待ち受付）
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700">
-                    <PlayCircle className="w-4 h-4" />
-                    受付中
-                  </span>
-                )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {(['online', 'offline'] as const).map((ct) => {
+            const paused = ct === 'online' ? !!settings?.online_paused : !!settings?.offline_paused
+            const label = ct === 'online' ? 'オンライン受講' : '対面受講'
+            const labelColor = ct === 'online' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+            return (
+              <div key={ct} className="flex items-center justify-between gap-2 px-2.5 py-2 bg-gray-50 rounded-lg">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${labelColor}`}>{label}</span>
+                  {paused ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700">
+                      <Pause className="w-3.5 h-3.5" />
+                      停止中
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                      <PlayCircle className="w-3.5 h-3.5" />
+                      受付中
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => togglePause(ct, !paused)}
+                  disabled={togglingPause === ct || !settings}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium text-white disabled:opacity-50 transition-colors flex-shrink-0 ${
+                    paused ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'
+                  }`}
+                >
+                  {togglingPause === ct ? '処理中...' : paused ? '受付を再開' : '受付を停止'}
+                </button>
               </div>
-              <button
-                onClick={() => togglePause(ct, !paused)}
-                disabled={togglingPause === ct || !settings}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-colors ${
-                  paused ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'
-                }`}
-              >
-                {togglingPause === ct ? '処理中...' : paused ? '受付を再開' : '受付を停止'}
-              </button>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
 
       {/* 申込フォームURL（2つ） */}

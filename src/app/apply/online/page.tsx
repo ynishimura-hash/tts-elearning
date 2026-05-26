@@ -296,9 +296,11 @@ function OnlineApplyForm() {
                   <MessageCircle className="w-5 h-5 text-[#06C755] flex-shrink-0 mt-0.5" />
                   <div className="text-green-900">
                     <p className="font-bold">LINE公式アカウントと連携中</p>
-                    <p className="text-xs text-green-700 mt-0.5">
-                      送信後、PayPalお支払いリンクをLINEとメールの両方でお送りします。
-                    </p>
+                    {!isWaitlistMode && (
+                      <p className="text-xs text-green-700 mt-0.5">
+                        送信後、PayPalお支払いリンクをLINEとメールの両方でお送りします。
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
