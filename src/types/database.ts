@@ -38,6 +38,11 @@ export interface User {
   last_payment_amount?: number | null
   last_payment_transaction_id?: string | null
   last_login_at?: string | null
+  // LINE 公式アカウント連携（2チャネル運用）
+  // - online: オンライン公式LINE の userId（オンライン会員 + テスター）
+  // - offline: オフライン公式LINE の userId（オフライン会員のみ。テスターは NULL）
+  line_user_id_online?: string | null
+  line_user_id_offline?: string | null
 }
 
 export interface Course {
@@ -189,6 +194,9 @@ export interface Application {
   payment_confirmed_at: string | null
   payment_confirmed_by: string | null
   user_id: string | null
+  // LINE 公式アカウント連携（2チャネル運用）
+  line_user_id_online: string | null
+  line_user_id_offline: string | null
 }
 
 // 申し込み受付状態（1行運用）
@@ -222,6 +230,35 @@ export interface WaitlistApplication {
   converted_at: string | null
   line_user_id: string | null
   created_at: string
+}
+
+// LINE 公式アカウント
+export type LineChannel = 'online' | 'offline'
+
+// LINE グループ / トーク / 個人（line_groups テーブル）
+export interface LineGroup {
+  id: string
+  group_id: string
+  source_type: 'user' | 'group' | 'room'
+  channel: LineChannel
+  display_name: string | null
+  is_peak_bottom_target: boolean
+  last_event_type: string | null
+  last_event_at: string | null
+  created_at: string
+}
+
+// LINE 連携トークン（公式LINEで「連携」と発言したユーザーに発行）
+// 専用URLで氏名 + 電話番号フォームを表示し、users テーブルと突合する
+export interface LineLinkToken {
+  token: string
+  line_user_id: string
+  channel: LineChannel
+  source_type: string
+  created_at: string
+  expires_at: string
+  used_at: string | null
+  linked_user_id: string | null
 }
 
 export interface TradeRule {

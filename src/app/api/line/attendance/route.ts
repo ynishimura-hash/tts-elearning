@@ -1,5 +1,25 @@
+/**
+ * 管理画面から手動で勉強会の出欠案内・リマインドを送信するエンドポイント
+ *
+ * チャネル別送信:
+ *   - オンライン勉強会 → 全員 オンライン公式LINE から
+ *   - 対面勉強会:
+ *     - テスター      → オンライン公式LINE から
+ *     - オフライン会員 → オフライン公式LINE から
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { pushLineMessage } from '@/lib/line-push'
+
+interface UserRow {
+  id: string
+  full_name: string
+  email: string
+  line_user_id_online: string | null
+  line_user_id_offline: string | null
+  is_online: boolean
+  is_tester: boolean
+}
 
 function getSupabase() {
   return createClient(
@@ -8,30 +28,21 @@ function getSupabase() {
   )
 }
 
-async function sendLineMessage(lineUserId: string, message: string, token: string | undefined) {
-  if (!token) {
-    console.log(`[LINE未設定] To: ${lineUserId}, Message: ${message}`)
-    return false
+/** session の is_online と user の is_tester から、送信に使うチャネルと line_user_id を決める */
+function resolveRecipient(
+  user: UserRow,
+  sessionIsOnline: boolean
+): { lineUserId: string | null; channel: 'online' | 'offline' } {
+  const useOnline = sessionIsOnline || user.is_tester === true
+  return {
+    lineUserId: useOnline ? user.line_user_id_online : user.line_user_id_offline,
+    channel: useOnline ? 'online' : 'offline',
   }
-
-  const res = await fetch('https://api.line.me/v2/bot/message/push', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      to: lineUserId,
-      messages: [{ type: 'text', text: message }],
-    }),
-  })
-  return res.ok
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const supabase = getSupabase()
-    const LINE_CHANNEL_ACCESS_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN
     const { sessionId, type } = await request.json()
 
     // 勉強会情報取得
@@ -45,13 +56,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: '勉強会が見つかりません' })
     }
 
-    // 対象ユーザー取得（オンライン/オフラインで分ける、テストアカウント除外）
-    const { data: users } = await supabase
+    // 対象ユーザー取得
+    // - オンライン勉強会: is_online=true
+    // - 対面勉強会: is_online=false または is_tester=true（テスター含む）
+    const usersQuery = supabase
       .from('users')
-      .select('id, full_name, email, line_user_id, is_online, is_test')
-      .eq('is_online', session.is_online)
+      .select('id, full_name, email, line_user_id_online, line_user_id_offline, is_online, is_tester')
       .eq('is_admin', false)
       .eq('is_test', false)
+
+    const { data: users } = session.is_online
+      ? await usersQuery.eq('is_online', true)
+      : await usersQuery.or('is_online.eq.false,is_tester.eq.true')
 
     if (!users || users.length === 0) {
       return NextResponse.json({ success: false, message: '対象ユーザーがいません' })
@@ -61,7 +77,7 @@ export async function POST(request: NextRequest) {
       year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
     })
 
-    let targetUsers = users
+    let targetUsers: UserRow[] = users as UserRow[]
     let sentCount = 0
 
     if (type === 'reminder') {
@@ -73,17 +89,18 @@ export async function POST(request: NextRequest) {
 
       const respondedUserIds = new Set(
         (attendance || [])
-          .filter(a => a.status !== 'pending')
-          .map(a => a.user_id)
+          .filter((a) => a.status !== 'pending')
+          .map((a) => a.user_id)
       )
-      targetUsers = users.filter(u => !respondedUserIds.has(u.id))
+      targetUsers = targetUsers.filter((u) => !respondedUserIds.has(u.id))
 
       for (const user of targetUsers) {
-        if (user.line_user_id) {
-          const message = `【リマインド】${session.title}\n\n${sessionDate}\n${session.session_time || ''}\n\nまだ出欠のご回答をいただいておりません。\nお手数ですがご回答をお願いいたします。`
-          const sent = await sendLineMessage(user.line_user_id, message, LINE_CHANNEL_ACCESS_TOKEN)
-          if (sent) sentCount++
-        }
+        const { lineUserId, channel } = resolveRecipient(user, session.is_online)
+        if (!lineUserId) continue
+
+        const message = `【リマインド】${session.title}\n\n${sessionDate}\n${session.session_time || ''}\n\nまだ出欠のご回答をいただいておりません。\nお手数ですがご回答をお願いいたします。`
+        const sent = await pushLineMessage(lineUserId, message, channel)
+        if (sent) sentCount++
       }
 
       // リマインドカウント更新
@@ -108,15 +125,16 @@ export async function POST(request: NextRequest) {
             status: 'pending',
           }, { onConflict: 'session_id,user_id' })
 
-        if (user.line_user_id) {
-          const locationInfo = session.is_online
-            ? (session.zoom_url ? `\nZoom: ${session.zoom_url}` : '')
-            : (session.location ? `\n場所: ${session.location}` : '')
+        const { lineUserId, channel } = resolveRecipient(user, session.is_online)
+        if (!lineUserId) continue
 
-          const message = `【勉強会のご案内】\n\n${session.title}\n日時: ${sessionDate}\n時間: ${session.session_time || '未定'}${locationInfo}\n\n出欠のご回答をお願いいたします。`
-          const sent = await sendLineMessage(user.line_user_id, message, LINE_CHANNEL_ACCESS_TOKEN)
-          if (sent) sentCount++
-        }
+        const locationInfo = session.is_online
+          ? (session.zoom_url ? `\nZoom: ${session.zoom_url}` : '')
+          : (session.location ? `\n場所: ${session.location}` : '')
+
+        const message = `【勉強会のご案内】\n\n${session.title}\n日時: ${sessionDate}\n時間: ${session.session_time || '未定'}${locationInfo}\n\n出欠のご回答をお願いいたします。`
+        const sent = await pushLineMessage(lineUserId, message, channel)
+        if (sent) sentCount++
       }
 
       // 送信済みフラグ更新
@@ -129,16 +147,23 @@ export async function POST(request: NextRequest) {
         .eq('id', sessionId)
     }
 
-    // LINE未設定の場合でも出欠レコードは作成済み
-    const lineConfigured = !!LINE_CHANNEL_ACCESS_TOKEN
-    const lineUsers = targetUsers.filter(u => u.line_user_id).length
+    // LINE 連携済みユーザー数（送信先チャネルに line_user_id があるユーザー）
+    const lineUsers = targetUsers.filter((u) => {
+      const { lineUserId } = resolveRecipient(u, session.is_online)
+      return !!lineUserId
+    }).length
+
+    const tokenConfigured =
+      !!process.env.LINE_CHANNEL_ACCESS_TOKEN_ONLINE ||
+      !!process.env.LINE_CHANNEL_ACCESS_TOKEN ||
+      !!process.env.LINE_CHANNEL_ACCESS_TOKEN_OFFLINE
 
     return NextResponse.json({
       success: true,
-      sentCount: lineConfigured ? sentCount : 0,
+      sentCount: tokenConfigured ? sentCount : 0,
       totalTargets: targetUsers.length,
       lineUsers,
-      message: !lineConfigured
+      message: !tokenConfigured
         ? `出欠レコードを${targetUsers.length}人分作成しました（LINE未設定のため通知は送信されていません）`
         : `${sentCount}人にLINE通知を送信しました`,
     })

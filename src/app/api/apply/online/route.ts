@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
     status: 'approved',
     payment_status: 'unpaid',
     auto_reply_sent: false,
-    line_user_id: lineUserId,
+    line_user_id_online: lineUserId,
   }).select('id').single()
 
   if (error) {
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
       `${PAYPAL_GUIDE}\n\n` +
       `ご入金が確認でき次第、3営業日以内にe-ラーニングのアカウント発行をさせていただきます。\n\n` +
       `TTSオンライン運営事務局`
-    linePushed = await pushLineMessage(lineUserId, lineMessage)
+    linePushed = await pushLineMessage(lineUserId, lineMessage, 'online')
   }
 
   // 管理者LINEグループに申込通知（is_peak_bottom_target = true のグループへ送る）
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
         `きっかけ: ${referralLine}\n` +
         `LINE連携: ${lineUserId ? 'あり' : 'なし'}\n\n` +
         `申込ID: ${data.id}`
-      adminGroupNotified = await pushLineMessage(adminGroup.group_id, groupMessage)
+      adminGroupNotified = await pushLineMessage(adminGroup.group_id, groupMessage, 'online')
     }
   } catch (err) {
     console.error('admin group notify failed:', err)

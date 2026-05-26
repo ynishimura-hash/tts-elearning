@@ -354,9 +354,9 @@ export async function POST(request: NextRequest) {
     raw_payload: body.raw_payload || null,
   })
 
-  // LINE Push（line_user_id があれば、ログイン情報を含めて送信）
+  // LINE Push（line_user_id_online があれば、オンライン公式LINEからログイン情報を送信）
   let linePushed = false
-  if (app.line_user_id) {
+  if (app.line_user_id_online) {
     const message =
       `${app.full_name}様\n\n` +
       `お支払いを確認いたしました。\n` +
@@ -369,7 +369,7 @@ export async function POST(request: NextRequest) {
       `※ ログイン後、マイページから必ずパスワードを変更してください。\n` +
       `※ ご入力いただいたメールアドレス宛にも同じ案内をお送りしています。\n\n` +
       `TTSオンライン運営事務局`
-    linePushed = await pushLineMessage(app.line_user_id, message)
+    linePushed = await pushLineMessage(app.line_user_id_online, message, 'online')
   }
 
   return NextResponse.json({

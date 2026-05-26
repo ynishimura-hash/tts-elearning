@@ -321,6 +321,16 @@ export default function AdminApplicationsPage() {
               <span className={`px-2 py-0.5 rounded text-xs ${filter === f.key ? 'bg-white/20' : 'bg-gray-100'}`}>{f.count}</span>
             </button>
           ))}
+          <Link
+            href="/admin/applications/waitlist"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white text-amber-700 border border-amber-200 hover:bg-amber-50"
+          >
+            <Hourglass className="w-3.5 h-3.5" />
+            空き待ち
+            <span className={`px-2 py-0.5 rounded text-xs ${waitlistCount > 0 ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-600'}`}>
+              {waitlistCount}
+            </span>
+          </Link>
           <div className="ml-auto flex gap-1">
             {(['all', 'online', 'offline'] as const).map(c => (
               <button key={c} onClick={() => setCourseFilter(c)}

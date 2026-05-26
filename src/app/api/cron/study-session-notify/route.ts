@@ -62,7 +62,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // オンライン勉強会の場合: オンラインユーザー
     const usersQuery = supabase
       .from('users')
-      .select('id, line_user_id, full_name, is_online, is_tester')
+      .select('id, line_user_id_online, line_user_id_offline, full_name, is_online, is_tester')
       .eq('is_admin', false)
       .eq('is_test', false)
 
@@ -90,7 +90,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           status: 'pending',
         }, { onConflict: 'session_id,user_id' })
 
-      if (user.line_user_id) {
+      // チャネル別送信先を決定
+      // - オンライン勉強会: 全員 online チャネルから
+      // - 対面勉強会:
+      //   - テスター（is_tester=true）→ オンライン公式LINE から（テスターはオンライン側のみ友だち登録）
+      //   - その他オフライン会員 → オフライン公式LINE から
+      const useOnlineChannel = session.is_online || user.is_tester === true
+      const lineUserId = useOnlineChannel
+        ? user.line_user_id_online
+        : user.line_user_id_offline
+      const channel = useOnlineChannel ? 'online' : 'offline'
+
+      if (lineUserId) {
         const locationInfo = session.is_online
           ? (session.zoom_url ? `\nZoom: ${session.zoom_url}` : '')
           : (session.location ? `\n場所: ${session.location}` : '')
@@ -102,7 +113,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           `時間: ${session.session_time || '未定'}${locationInfo}\n\n` +
           `出欠のご回答をお願いいたします。`
 
-        const sent = await pushLineMessage(user.line_user_id, message)
+        const sent = await pushLineMessage(lineUserId, message, channel)
         if (sent) result.sent++
       }
     }
