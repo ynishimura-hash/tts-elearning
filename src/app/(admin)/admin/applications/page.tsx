@@ -1,14 +1,15 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import {
   Search, Trash2, ChevronDown, Mail, Phone, MapPin, CalendarDays,
-  Clock, CheckCircle2, Wallet, UserCheck, Copy, Check, ExternalLink, Link2,
+  Clock, CheckCircle2, Wallet, UserCheck, Copy, Check, ExternalLink, Link2, Power, Pause, PlayCircle, Hourglass,
 } from 'lucide-react'
 import { formatDateTime } from '@/lib/utils'
-import type { Application } from '@/types/database'
+import type { Application, ApplicationSettings } from '@/types/database'
 
 type AppRow = Application & {
   payment_status?: 'unpaid' | 'paid' | 'cancelled'
@@ -40,8 +41,9 @@ export default function AdminApplicationsPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
-
-  useEffect(() => { fetchData() }, [])
+  const [settings, setSettings] = useState<ApplicationSettings | null>(null)
+  const [waitlistCount, setWaitlistCount] = useState(0)
+  const [togglingPause, setTogglingPause] = useState<'online' | 'offline' | null>(null)
 
   async function fetchData() {
     const supabase = createClient()
@@ -50,6 +52,59 @@ export default function AdminApplicationsPage() {
       .select('*')
       .order('created_at', { ascending: false })
     if (apps) setApplications(apps as AppRow[])
+  }
+
+  async function fetchSettings() {
+    try {
+      const res = await fetch('/api/admin/application-settings')
+      const data = await res.json()
+      if (data.success && data.settings) setSettings(data.settings)
+    } catch {
+      // ignore
+    }
+  }
+
+  async function fetchWaitlistCount() {
+    const supabase = createClient()
+    const { count } = await supabase
+      .from('waitlist_applications')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'waiting')
+    setWaitlistCount(count || 0)
+  }
+
+  useEffect(() => {
+    fetchData()
+    fetchSettings()
+    fetchWaitlistCount()
+  }, [])
+
+  async function togglePause(courseType: 'online' | 'offline', nextPaused: boolean) {
+    const action = nextPaused ? '停止' : '受付再開'
+    const label = courseType === 'online' ? 'オンライン' : '対面'
+    if (!confirm(`${label}申込の受付を${action}します。よろしいですか？`)) return
+    setTogglingPause(courseType)
+    try {
+      const res = await fetch('/api/admin/application-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          courseType === 'online'
+            ? { online_paused: nextPaused }
+            : { offline_paused: nextPaused }
+        ),
+      })
+      const data = await res.json()
+      if (data.success && data.settings) {
+        setSettings(data.settings)
+        toast.success(`${label}の受付を${action}しました`)
+      } else {
+        toast.error(data.error || '変更に失敗しました')
+      }
+    } catch {
+      toast.error('通信エラーが発生しました')
+    }
+    setTogglingPause(null)
   }
 
   async function changeStatus(app: AppRow, next: StatusKey) {
@@ -154,6 +209,61 @@ export default function AdminApplicationsPage() {
     <div className="space-y-6 pt-12 lg:pt-0">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-gray-800">申込管理</h1>
+        <Link
+          href="/admin/applications/waitlist"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-800 rounded-lg font-medium hover:bg-amber-200 transition-colors text-sm"
+        >
+          <Hourglass className="w-4 h-4" />
+          空き待ち一覧
+          {waitlistCount > 0 && (
+            <span className="ml-1 px-2 py-0.5 bg-amber-600 text-white text-xs rounded-full font-bold">
+              {waitlistCount}
+            </span>
+          )}
+        </Link>
+      </div>
+
+      {/* 受付状態トグル */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Power className="w-4 h-4 text-gray-600" />
+          <p className="text-sm font-medium text-gray-700">申し込み受付状態</p>
+        </div>
+        <p className="text-xs text-gray-500">
+          停止中は、申込フォームが「空き待ちフォーム」に切り替わります。受付再開後、管理画面（空き待ち一覧）から個別に招待を送信できます。
+        </p>
+        {(['online', 'offline'] as const).map((ct) => {
+          const paused = ct === 'online' ? !!settings?.online_paused : !!settings?.offline_paused
+          const label = ct === 'online' ? 'オンライン受講' : '対面受講'
+          const labelColor = ct === 'online' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+          return (
+            <div key={ct} className="flex items-center justify-between gap-2 flex-wrap p-3 bg-gray-50 rounded-lg">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-xs px-2 py-1 rounded font-medium ${labelColor}`}>{label}</span>
+                {paused ? (
+                  <span className="inline-flex items-center gap-1 text-sm font-medium text-amber-700">
+                    <Pause className="w-4 h-4" />
+                    停止中（空き待ち受付）
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700">
+                    <PlayCircle className="w-4 h-4" />
+                    受付中
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => togglePause(ct, !paused)}
+                disabled={togglingPause === ct || !settings}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-colors ${
+                  paused ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'
+                }`}
+              >
+                {togglingPause === ct ? '処理中...' : paused ? '受付を再開' : '受付を停止'}
+              </button>
+            </div>
+          )
+        })}
       </div>
 
       {/* 申込フォームURL（2つ） */}

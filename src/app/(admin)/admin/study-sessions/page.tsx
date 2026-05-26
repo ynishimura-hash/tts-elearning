@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin, Edit, Save, X, Send, Bell, Copy, Zap } from 'lucide-react'
-import { formatDate, formatDateWithWeekday } from '@/lib/utils'
+import { formatDate, formatDateWithWeekday, isPastSession } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance, User } from '@/types/database'
 
 type EligibleUser = Pick<User, 'id' | 'full_name' | 'email' | 'is_online' | 'is_admin' | 'is_test' | 'is_free_user' | 'is_tester'>
@@ -226,7 +226,7 @@ export default function AdminStudySessionsPage() {
   }
 
   const filtered = sessions.filter(s => {
-    const isPast = new Date(s.session_date) < new Date()
+    const isPast = isPastSession(s.session_date)
     if (filter === 'online' && !s.is_online) return false
     if (filter === 'offline' && s.is_online) return false
     if (filter === 'upcoming' && isPast) return false
@@ -340,7 +340,7 @@ export default function AdminStudySessionsPage() {
           // 未回答 = 対象ユーザー数 - (出席 + 欠席 + 未定)
           // ※ レコード自体がない人もカウントされる
           const pendingCount = Math.max(0, eligibleUsers.length - attending.length - absent.length - undecided.length)
-          const isPast = new Date(session.session_date) < new Date()
+          const isPast = isPastSession(session.session_date)
           const isExpanded = expandedSession === session.id
 
           return (

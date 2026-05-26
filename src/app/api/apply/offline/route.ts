@@ -12,6 +12,8 @@ interface ApplyBody {
   address: string
   referral_source: string
   referral_detail?: string
+  waitlist_token?: string | null
+  waitlist_id?: string | null
 }
 
 const PAYPAL_LINK = 'https://www.paypal.com/ncp/payment/QDXMSCV3MUMCL'
@@ -121,6 +123,22 @@ export async function POST(request: NextRequest) {
   const sent = await sendAutoReply(body)
   if (sent) {
     await admin.from('applications').update({ auto_reply_sent: true }).eq('id', data.id)
+  }
+
+  // 空き待ち招待経由の場合、waitlist_applications を converted に更新
+  if (body.waitlist_token || body.waitlist_id) {
+    const query = admin
+      .from('waitlist_applications')
+      .update({
+        status: 'converted',
+        converted_application_id: data.id,
+        converted_at: new Date().toISOString(),
+      })
+    if (body.waitlist_token) {
+      await query.eq('invite_token', body.waitlist_token)
+    } else if (body.waitlist_id) {
+      await query.eq('id', body.waitlist_id)
+    }
   }
 
   return NextResponse.json({ success: true, id: data.id, auto_reply_sent: sent })

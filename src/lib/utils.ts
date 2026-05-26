@@ -38,6 +38,17 @@ export function daysSince(dateStr: string | null): number {
   return Math.floor(diff / (1000 * 60 * 60 * 24))
 }
 
+// 勉強会開催日の翌日0:00から「過去」扱い。当日中は「今後の勉強会」に残る。
+export function isPastSession(sessionDate: string): boolean {
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return new Date(sessionDate) < todayStart
+}
+
+export function isUpcomingSession(sessionDate: string): boolean {
+  return !isPastSession(sessionDate)
+}
+
 export function getYouTubeId(url: string | null): string | null {
   if (!url) return null
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([^&?\s]+)/)

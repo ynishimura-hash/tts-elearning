@@ -1,13 +1,27 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { toast, Toaster } from 'sonner'
-import { CheckCircle2, Send, AlertCircle } from 'lucide-react'
+import { CheckCircle2, Send, AlertCircle, Clock } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 const REFERRAL_OPTIONS = ['HPから', '知人の紹介', 'SNSにて', 'その他'] as const
 type Referral = (typeof REFERRAL_OPTIONS)[number]
 
+type PageMode = 'loading' | 'apply' | 'waitlist' | 'invite_error'
+
 export default function OfflineApplyPage() {
+  return (
+    <Suspense fallback={null}>
+      <OfflineApplyForm />
+    </Suspense>
+  )
+}
+
+function OfflineApplyForm() {
+  const searchParams = useSearchParams()
+  const waitlistToken = searchParams.get('waitlist')
   const [form, setForm] = useState({
     full_name: '',
     furigana: '',
@@ -21,8 +35,62 @@ export default function OfflineApplyPage() {
   })
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [pageMode, setPageMode] = useState<PageMode>('loading')
+  const [waitlistId, setWaitlistId] = useState<string | null>(null)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function init() {
+      if (waitlistToken) {
+        try {
+          const res = await fetch(`/api/waitlist/by-token?token=${encodeURIComponent(waitlistToken)}`)
+          const data = await res.json()
+          if (data.success && data.waitlist) {
+            const w = data.waitlist
+            const refOpt: Referral | '' = REFERRAL_OPTIONS.includes(w.referral_source) ? w.referral_source : ''
+            setForm({
+              full_name: w.full_name || '',
+              furigana: w.furigana || '',
+              email: w.email || '',
+              phone: w.phone || '',
+              birthdate: w.birthdate || '',
+              postal_code: w.postal_code || '',
+              address: w.address || '',
+              referral_source: refOpt,
+              referral_detail: w.referral_detail || '',
+            })
+            setWaitlistId(w.id)
+            setPageMode('apply')
+            return
+          } else {
+            setInviteError(data.error || '招待リンクが無効です')
+            setPageMode('invite_error')
+            return
+          }
+        } catch {
+          setInviteError('招待リンクの確認中にエラーが発生しました')
+          setPageMode('invite_error')
+          return
+        }
+      }
+
+      try {
+        const supabase = createClient()
+        const { data: settings } = await supabase
+          .from('application_settings')
+          .select('offline_paused')
+          .eq('id', true)
+          .maybeSingle()
+        setPageMode(settings?.offline_paused ? 'waitlist' : 'apply')
+      } catch {
+        setPageMode('apply')
+      }
+    }
+    init()
+  }, [waitlistToken])
 
   const showReferralDetail = ['知人の紹介', 'SNSにて', 'その他'].includes(form.referral_source)
+  const isWaitlistMode = pageMode === 'waitlist'
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -32,10 +100,14 @@ export default function OfflineApplyPage() {
     }
     setSubmitting(true)
     try {
-      const res = await fetch('/api/apply/offline', {
+      const endpoint = isWaitlistMode ? '/api/waitlist/offline' : '/api/apply/offline'
+      const payload = isWaitlistMode
+        ? { ...form }
+        : { ...form, waitlist_token: waitlistToken, waitlist_id: waitlistId }
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (data.success) {
@@ -47,6 +119,60 @@ export default function OfflineApplyPage() {
       toast.error('通信エラーが発生しました')
     }
     setSubmitting(false)
+  }
+
+  if (pageMode === 'loading') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#384a8f]/5 to-[#e39f3c]/5 flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-4 border-[#384a8f] border-t-transparent rounded-full" />
+      </div>
+    )
+  }
+
+  if (pageMode === 'invite_error') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#384a8f]/5 to-[#e39f3c]/5 px-4 py-12 flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-8 text-center">
+          <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-8 h-8 text-rose-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-3">招待リンクが無効です</h1>
+          <p className="text-gray-600 leading-relaxed mb-2">
+            {inviteError || '招待リンクをご確認ください'}
+          </p>
+          <p className="text-sm text-gray-500 mt-4">
+            ご不明な点は事務局までお問い合わせください。
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (submitted && isWaitlistMode) {
+    return (
+      <>
+        <Toaster position="top-center" richColors />
+        <div className="min-h-screen bg-gradient-to-br from-[#384a8f]/5 to-[#e39f3c]/5 px-4 py-12 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-8 text-center">
+            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Clock className="w-8 h-8 text-amber-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-800 mb-3">空き待ちにご登録いただきました</h1>
+            <p className="text-gray-600 leading-relaxed mb-6">
+              現在、お申し込みの受付を一時停止しております。<br />
+              ご記入いただいた内容で<strong className="text-gray-800">空き待ち</strong>としてお預かりいたしました。<br />
+              受付再開の際に、改めて事務局よりご案内のメールをお送りいたします。
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900 text-left">
+              <p className="font-bold mb-1">📩 確認メールをお送りしました</p>
+              <p className="text-blue-800">
+                ご入力いただいたメールアドレス宛に、ご登録内容の確認メールをお送りしています。届かない場合は迷惑メールフォルダもご確認ください。
+              </p>
+            </div>
+          </div>
+        </div>
+      </>
+    )
   }
 
   if (submitted) {
@@ -86,12 +212,42 @@ export default function OfflineApplyPage() {
           <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
             <div className="bg-gradient-to-r from-[#384a8f] to-[#1a2456] text-white p-6 md:p-8">
               <h1 className="text-xl md:text-2xl font-bold mb-2">
-                TTS有料会員 申込フォーム<br className="md:hidden" />（対面受講）
+                {isWaitlistMode ? (
+                  <>TTS有料会員 空き待ちフォーム<br className="md:hidden" />（対面受講）</>
+                ) : (
+                  <>TTS有料会員 申込フォーム<br className="md:hidden" />（対面受講）</>
+                )}
               </h1>
               <p className="text-sm text-white/80">トレーダー・トレーニング・スクール</p>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-5">
+              {isWaitlistMode && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-2 text-sm">
+                  <Clock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-amber-900">
+                    <p className="font-bold">現在、お申し込みの受付を一時停止しております</p>
+                    <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                      下記フォームにご記入いただきますと「空き待ち」としてお預かりいたします。<br />
+                      受付再開の際に、ご入力いただいたメールアドレス宛に正式なお申し込み手続きのご案内をお送りいたします。
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {waitlistId && !isWaitlistMode && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-2 text-sm">
+                  <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-blue-900">
+                    <p className="font-bold">受付を再開いたしました</p>
+                    <p className="text-xs text-blue-800 mt-1 leading-relaxed">
+                      空き待ちのご登録ありがとうございました。<br />
+                      ご入力いただいた内容を反映しています。内容をご確認のうえ、お申し込みください。
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   メールアドレス <span className="text-red-500">*</span>
@@ -196,10 +352,12 @@ export default function OfflineApplyPage() {
                 <button type="submit" disabled={submitting}
                   className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-[#384a8f] text-white rounded-lg font-bold hover:bg-[#2d3d75] transition-colors disabled:opacity-50 text-base">
                   <Send className="w-5 h-5" />
-                  {submitting ? '送信中...' : '申し込む'}
+                  {submitting ? '送信中...' : isWaitlistMode ? '空き待ちに登録する' : '申し込む'}
                 </button>
                 <p className="text-xs text-gray-500 mt-3 text-center">
-                  送信後、入金手続きのご案内メールが自動でお送りされます
+                  {isWaitlistMode
+                    ? '送信後、ご登録内容の確認メールが自動でお送りされます'
+                    : '送信後、入金手続きのご案内メールが自動でお送りされます'}
                 </p>
               </div>
             </form>

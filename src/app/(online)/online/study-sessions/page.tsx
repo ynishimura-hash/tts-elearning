@@ -19,7 +19,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react'
-import { formatDateWithWeekday } from '@/lib/utils'
+import { formatDateWithWeekday, isPastSession, isUpcomingSession } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance } from '@/types/database'
 
 // 出欠締切: 開催日の 1 週間前 23:59
@@ -99,12 +99,11 @@ export default function OnlineStudySessionsPage() {
     }))
   }
 
-  const now = new Date()
   const upcoming = sessions
-    .filter(s => new Date(s.session_date) >= now)
+    .filter(s => isUpcomingSession(s.session_date))
     .sort((a, b) => new Date(a.session_date).getTime() - new Date(b.session_date).getTime())
   const past = sessions
-    .filter(s => new Date(s.session_date) < now)
+    .filter(s => isPastSession(s.session_date))
     .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
   const PAST_VISIBLE = 2
   const visiblePast = showAllPast ? past : past.slice(0, PAST_VISIBLE)

@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { CalendarDays, MapPin, CheckCircle2, XCircle, Clock, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react'
-import { formatDate, formatDateWithWeekday } from '@/lib/utils'
+import { formatDate, formatDateWithWeekday, isPastSession, isUpcomingSession } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance } from '@/types/database'
 
 export default function StudySessionsPage() {
@@ -99,11 +99,10 @@ export default function StudySessionsPage() {
   }
 
   const [showAllPast, setShowAllPast] = useState(false)
-  const now = new Date()
-  const upcoming = sessions.filter(s => new Date(s.session_date) >= now)
+  const upcoming = sessions.filter(s => isUpcomingSession(s.session_date))
   // 過去は最新（新しい）が上に来るように降順ソート
   const past = sessions
-    .filter(s => new Date(s.session_date) < now)
+    .filter(s => isPastSession(s.session_date))
     .sort((a, b) => new Date(b.session_date).getTime() - new Date(a.session_date).getTime())
   const PAST_VISIBLE = 2
   const visiblePast = showAllPast ? past : past.slice(0, PAST_VISIBLE)

@@ -8,7 +8,7 @@ import { ProgressBar } from '@/components/ProgressBar'
 import { StudySessionCalendar } from '@/components/StudySessionCalendar'
 import { UpcomingSessionsList } from '@/components/UpcomingSessionsList'
 import { BookOpen, CalendarDays, TrendingUp, Bell, ChevronRight, CheckCircle2, XCircle, Clock, MapPin, AlertCircle } from 'lucide-react'
-import { formatDate, formatDateWithWeekday, daysSince } from '@/lib/utils'
+import { formatDate, formatDateWithWeekday, daysSince, isUpcomingSession } from '@/lib/utils'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
 import type { Course, StudySession, StudySessionAttendance, Announcement } from '@/types/database'
 
@@ -65,7 +65,7 @@ export default function HomePage() {
 
       if (sessionsData) {
         setAllSessions(sessionsData)
-        const nextOne = sessionsData.find(s => new Date(s.session_date) >= now)
+        const nextOne = sessionsData.find(s => isUpcomingSession(s.session_date))
         if (nextOne) setNextSession(nextOne)
 
         const sessionIds = sessionsData.map(s => s.id)
@@ -183,51 +183,48 @@ export default function HomePage() {
           <ProgressBar value={completedContents} max={totalContents} />
         </div>
 
-        <div className="bg-white rounded-xl p-5 shadow-sm">
-          <div className="flex items-center gap-3 mb-1">
+        <div className="bg-white rounded-xl p-4 shadow-sm">
+          <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
               <CalendarDays className="w-5 h-5 text-[#e39f3c]" />
             </div>
-            <div className="min-w-0">
-              <p className="text-sm text-gray-500">次の勉強会</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-gray-500">次の勉強会</p>
               <p className="text-sm font-bold">
                 {nextSession ? formatDateWithWeekday(nextSession.session_date) : '未定'}
+                {nextSession?.session_time && (
+                  <span className="font-normal text-xs text-gray-500 ml-2">
+                    {nextSession.session_time}
+                  </span>
+                )}
               </p>
-              {nextSession?.session_time && (
-                <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                  <Clock className="w-3 h-3" />{nextSession.session_time}
+              {nextAttendance?.status === 'attending' && nextSession?.location && (
+                <p className="text-[11px] text-gray-700 flex items-center gap-0.5 mt-0.5">
+                  <MapPin className="w-3 h-3 text-emerald-700" />{nextSession.location}
                 </p>
               )}
             </div>
           </div>
           {nextSession && (
-            <>
-              {/* ステータスバッジ */}
+            <div className="mt-2 flex items-center gap-2 flex-wrap">
               {!nextAttendance ? (
-                <div className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-orange-100 text-orange-700 font-medium">
+                <span className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-medium">
                   <AlertCircle className="w-3 h-3" />未回答
-                </div>
+                </span>
               ) : nextAttendance.status === 'attending' ? (
-                <div className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-green-100 text-green-700 font-medium">
-                  <CheckCircle2 className="w-3 h-3" />出席で登録済み
-                </div>
+                <span className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium">
+                  <CheckCircle2 className="w-3 h-3" />出席
+                </span>
               ) : (
-                <div className="mt-2 inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-red-100 text-red-700 font-medium">
-                  <XCircle className="w-3 h-3" />欠席で登録済み
-                </div>
+                <span className="inline-flex items-center gap-0.5 text-[11px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-medium">
+                  <XCircle className="w-3 h-3" />欠席
+                </span>
               )}
 
-              {/* 出席者のみ場所を表示 */}
-              {nextAttendance?.status === 'attending' && nextSession.location && (
-                <p className="mt-2 text-xs text-gray-700 flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-emerald-700" />{nextSession.location}
-                </p>
-              )}
-
-              <Link href="/study-sessions" className="mt-2 ml-2 inline-flex items-center text-xs text-[#384a8f] hover:underline">
-                {nextAttendance ? '変更する' : '出欠を回答する'} <ChevronRight className="w-3 h-3" />
+              <Link href="/study-sessions" className="inline-flex items-center text-[11px] text-[#384a8f] hover:underline">
+                {nextAttendance ? '変更' : '出欠を回答'} <ChevronRight className="w-3 h-3" />
               </Link>
-            </>
+            </div>
           )}
         </div>
 

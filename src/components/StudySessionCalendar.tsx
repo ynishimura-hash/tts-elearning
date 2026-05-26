@@ -122,27 +122,21 @@ export function StudySessionCalendar({ sessions, attendance }: StudySessionCalen
                   {daySessions.map((s) => {
                     const att = attendance[s.id]
                     const status = statusOf(att)
-                    const baseColor = s.is_online ? 'purple' : 'emerald'
-                    const label = s.is_online ? 'オン' : 'リアル'
+                    const label = s.is_online ? 'オンライン' : 'リアル'
 
-                    // 出席/欠席に応じて色変更
-                    const bgClass =
-                      status === 'attending'
-                        ? 'bg-green-100 text-green-700 ring-1 ring-green-300'
-                        : status === 'absent'
-                        ? 'bg-red-50 text-red-600 ring-1 ring-red-200 opacity-80'
-                        : baseColor === 'purple'
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'bg-emerald-100 text-emerald-700'
+                    // 色は常に種類で固定。出欠はアイコンで表現。
+                    const bgClass = s.is_online
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'bg-emerald-100 text-emerald-700'
 
                     return (
                       <div
                         key={s.id}
-                        className={`text-[10px] leading-none px-1 py-0.5 rounded flex items-center justify-center gap-0.5 ${bgClass}`}
+                        className={`text-[9px] leading-tight px-1 py-0.5 rounded flex items-center justify-center gap-0.5 ${bgClass}`}
                       >
                         {status === 'attending' && <Check className="w-2.5 h-2.5 flex-shrink-0" />}
                         {status === 'absent' && <X className="w-2.5 h-2.5 flex-shrink-0" />}
-                        <span className="truncate">{label}</span>
+                        <span>{label}</span>
                       </div>
                     )
                   })}
@@ -154,20 +148,18 @@ export function StudySessionCalendar({ sessions, attendance }: StudySessionCalen
       </div>
 
       {/* 凡例 */}
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-gray-600">
+      <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-gray-600">
         <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
-          オン
-          <span className="text-gray-500 ml-0.5">=オンライン</span>
+          オンライン
         </div>
         <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
           リアル
-          <span className="text-gray-500 ml-0.5">=対面</span>
         </div>
-        <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-100 text-green-700">
-          <Check className="w-3 h-3" />=出席
+        <div className="inline-flex items-center gap-1 text-gray-600">
+          <Check className="w-3 h-3" />= 出席
         </div>
-        <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 text-red-600">
-          <X className="w-3 h-3" />=欠席
+        <div className="inline-flex items-center gap-1 text-gray-600">
+          <X className="w-3 h-3" />= 欠席
         </div>
       </div>
     </div>

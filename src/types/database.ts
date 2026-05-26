@@ -191,6 +191,39 @@ export interface Application {
   user_id: string | null
 }
 
+// 申し込み受付状態（1行運用）
+export interface ApplicationSettings {
+  id: boolean
+  online_paused: boolean
+  offline_paused: boolean
+  online_paused_at: string | null
+  offline_paused_at: string | null
+  updated_at: string
+}
+
+// 空き待ち申込
+export interface WaitlistApplication {
+  id: string
+  full_name: string
+  furigana: string
+  email: string
+  phone: string
+  birthdate: string
+  postal_code: string
+  address: string
+  referral_source: string
+  referral_detail: string | null
+  course_type: 'online' | 'offline'
+  status: 'waiting' | 'invited' | 'converted' | 'cancelled'
+  invite_token: string | null
+  invite_sent_at: string | null
+  invite_expires_at: string | null
+  converted_application_id: string | null
+  converted_at: string | null
+  line_user_id: string | null
+  created_at: string
+}
+
 export interface TradeRule {
   id: string
   name: string

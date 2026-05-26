@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { CalendarDays, Clock, MapPin, Video, CheckCircle2, XCircle, AlertCircle, ChevronRight } from 'lucide-react'
-import { formatDateWithWeekday } from '@/lib/utils'
+import { formatDateWithWeekday, isUpcomingSession } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance } from '@/types/database'
 
 interface UpcomingSessionsListProps {
@@ -21,7 +21,7 @@ export function UpcomingSessionsList({
   limit = 5,
 }: UpcomingSessionsListProps) {
   const upcoming = sessions
-    .filter(s => new Date(s.session_date) >= new Date())
+    .filter(s => isUpcomingSession(s.session_date))
     .sort((a, b) => new Date(a.session_date).getTime() - new Date(b.session_date).getTime())
     .slice(0, limit)
 
