@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
         `きっかけ: ${referralLine}\n\n` +
         `空き待ちID: ${data.id}\n` +
         `※受付再開時、管理画面から招待を送信してください。`
-      adminGroupNotified = await pushLineMessage(adminGroup.group_id, groupMessage)
+      adminGroupNotified = await pushLineMessage(adminGroup.group_id, groupMessage, 'online')
     }
   } catch (err) {
     console.error('admin group notify failed:', err)

@@ -7,6 +7,7 @@ import { useUser } from '@/lib/hooks/useUser'
 import { ProgressBar } from '@/components/ProgressBar'
 import { StudySessionCalendar } from '@/components/StudySessionCalendar'
 import { UpcomingSessionsList } from '@/components/UpcomingSessionsList'
+import { LineLinkButton } from '@/components/LineLinkButton'
 import {
   BookOpen,
   CalendarDays,
@@ -152,6 +153,9 @@ export default function OnlineHomePage() {
           受講開始から {daysSince(user?.account_issued_at || null)} 日目
         </p>
       </div>
+
+      {/* LINE連携ボタン（未連携時のみ表示） */}
+      <LineLinkButton channel="online" lineUserId={user?.line_user_id_online} variant="compact" />
 
       {/* 統計カード */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

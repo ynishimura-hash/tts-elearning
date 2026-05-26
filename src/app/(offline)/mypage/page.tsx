@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { User, Lock, Save, CheckCircle2, ExternalLink } from 'lucide-react'
 import { formatDate, daysSince } from '@/lib/utils'
+import { LineLinkButton } from '@/components/LineLinkButton'
 
 export default function MyPage() {
   const { user, loading } = useUser()
@@ -109,6 +110,9 @@ export default function MyPage() {
           )}
         </div>
       </div>
+
+      {/* LINE連携 */}
+      <LineLinkButton channel="offline" lineUserId={user.line_user_id_offline} variant="card" />
 
       {/* パスワード変更 */}
       <div className="bg-white rounded-xl p-6 shadow-sm">

@@ -228,14 +228,27 @@ export async function handleLineWebhook(
       }
 
       const applyUrl = `https://tts-e.vercel.app/apply/online?token=${applyToken}`
-      await pushLineMessage(
-        lineUserId,
-        `TTSオンライン有料会員のお申込みは下記URLからどうぞ。\n\n` +
+
+      // 受付状態を確認（停止中なら空き待ち案内に切替・PayPalくだりは除く）
+      const { data: settings } = await sb
+        .from('application_settings')
+        .select('online_paused')
+        .eq('id', true)
+        .maybeSingle()
+      const isPaused = !!settings?.online_paused
+
+      const message = isPaused
+        ? `現在、TTSオンライン有料会員のお申し込み受付を一時停止しております。\n\n` +
+          `下記URLより「空き待ちフォーム」へのご登録をお願いいたします。\n\n` +
           `${applyUrl}\n\n` +
           `※ このURLは7日間有効です。\n` +
-          `※ フォーム送信後、PayPalお支払いリンクをこちらのトークと、ご入力いただいたメールアドレス宛にお送りします。`,
-        'online'
-      )
+          `※ 受付再開の際に、ご入力いただいたメールアドレス宛に、正式なお申し込みのご案内をお送りいたします。`
+        : `TTSオンライン有料会員のお申込みは下記URLからどうぞ。\n\n` +
+          `${applyUrl}\n\n` +
+          `※ このURLは7日間有効です。\n` +
+          `※ フォーム送信後、PayPalお支払いリンクをこちらのトークと、ご入力いただいたメールアドレス宛にお送りします。`
+
+      await pushLineMessage(lineUserId, message, 'online')
       continue
     }
 

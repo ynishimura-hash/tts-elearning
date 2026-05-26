@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { User, Lock, Save, CheckCircle2, ExternalLink } from 'lucide-react'
 import { formatDate, daysSince } from '@/lib/utils'
+import { LineLinkButton } from '@/components/LineLinkButton'
 
 export default function OnlineMyPage() {
   const { user, loading } = useUser()
@@ -51,6 +52,9 @@ export default function OnlineMyPage() {
           )}
         </div>
       </div>
+      {/* LINE連携 */}
+      <LineLinkButton channel="online" lineUserId={user.line_user_id_online} variant="card" />
+
       <div className="bg-white rounded-xl p-6 shadow-sm">
         <h2 className="text-lg font-bold text-[#384a8f] mb-4 flex items-center gap-2"><Lock className="w-5 h-5" />パスワード変更</h2>
         <form onSubmit={handlePasswordChange} className="space-y-4 max-w-sm">

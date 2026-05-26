@@ -7,6 +7,7 @@ import { useUser } from '@/lib/hooks/useUser'
 import { ProgressBar } from '@/components/ProgressBar'
 import { StudySessionCalendar } from '@/components/StudySessionCalendar'
 import { UpcomingSessionsList } from '@/components/UpcomingSessionsList'
+import { LineLinkButton } from '@/components/LineLinkButton'
 import { BookOpen, CalendarDays, TrendingUp, Bell, ChevronRight, CheckCircle2, XCircle, Clock, MapPin, AlertCircle } from 'lucide-react'
 import { formatDate, formatDateWithWeekday, daysSince, isUpcomingSession } from '@/lib/utils'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
@@ -167,6 +168,9 @@ export default function HomePage() {
           </div>
         </div>
       </div>
+
+      {/* LINE連携ボタン（未連携時のみ表示） */}
+      <LineLinkButton channel="offline" lineUserId={user?.line_user_id_offline} variant="compact" />
 
       {/* 統計カード */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
