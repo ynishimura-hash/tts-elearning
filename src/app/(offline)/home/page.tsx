@@ -153,19 +153,17 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6 pt-12 lg:pt-0">
-      {/* ヒーローバナー */}
-      <div className="relative rounded-2xl overflow-hidden">
+      {/* ヒーローバナー（画像＋あいさつを分離：画像は全体表示、文字は無地帯で常に可読） */}
+      <div className="rounded-2xl overflow-hidden bg-white shadow-sm">
         <img src="/hero-banner.png" alt="TTS" className="w-full object-contain" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-6">
-          <div>
-            <h1 className="text-2xl font-bold text-white mb-1">
-              おかえりなさい、{user?.full_name || user?.username}さん
-            </h1>
-            <p className="text-white/80 text-sm">
-              受講開始から {daysSince(user?.account_issued_at || null)} 日目
-              {user?.is_debuted && ' ・ デビュー済み'}
-            </p>
-          </div>
+        <div className="bg-gradient-to-r from-[#384a8f] to-[#4a5ea8] px-5 py-4 text-white">
+          <h1 className="text-lg md:text-2xl font-bold mb-0.5">
+            おかえりなさい、{user?.full_name || user?.username}さん
+          </h1>
+          <p className="text-white/80 text-xs md:text-sm">
+            受講開始から {daysSince(user?.account_issued_at || null)} 日目
+            {user?.is_debuted && ' ・ デビュー済み'}
+          </p>
         </div>
       </div>
 

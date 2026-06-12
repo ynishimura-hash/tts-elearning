@@ -28,7 +28,8 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
 
   // 公開ページのパス
-  const publicPaths = ['/login', '/apply', '/apply/online', '/api/', '/expired', '/blog', '/unsubscribe']
+  // /line-link: LINE「連携」導線。未ログインの会員が開くためログイン不要（トークン検証は /api/line/link/* で実施）
+  const publicPaths = ['/login', '/apply', '/apply/online', '/api/', '/expired', '/blog', '/unsubscribe', '/line-link']
   const isPublicPath = publicPaths.some(path => request.nextUrl.pathname.startsWith(path))
 
   if (!user && !isPublicPath) {
