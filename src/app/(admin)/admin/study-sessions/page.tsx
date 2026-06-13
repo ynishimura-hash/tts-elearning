@@ -19,6 +19,24 @@ const STAGE_LABEL: Record<string, string> = {
   attend_1day: '1日前 リマインド',
 }
 
+// 自動送信の段階（cron と一致）。手動催促時のスキップ選択に使う
+const AUTO_STAGES: { flag: 'notify_1month_at' | 'two_week_notify_sent_at' | 'remind_1week_at' | 'remind_1day_at'; offsetDays: number; label: string }[] = [
+  { flag: 'notify_1month_at', offsetDays: 30, label: '1ヶ月前 催促' },
+  { flag: 'two_week_notify_sent_at', offsetDays: 14, label: '2週間前 催促' },
+  { flag: 'remind_1week_at', offsetDays: 7, label: '1週間前 リマインド' },
+  { flag: 'remind_1day_at', offsetDays: 1, label: '1日前 リマインド' },
+]
+function upcomingAutoStages(session: StudySession) {
+  const now = new Date()
+  const sd = new Date(session.session_date).getTime()
+  return AUTO_STAGES.map((s) => {
+    const stageDate = new Date(sd - s.offsetDays * 24 * 60 * 60 * 1000)
+    const sent = !!session[s.flag]
+    const skipped = session.notify_skip?.includes(s.flag) ?? false
+    return { ...s, stageDate, willSend: !sent && !skipped && stageDate > now }
+  })
+}
+
 type AttendanceStatus = 'attending' | 'absent' | 'undecided' | 'pending'
 type RosterRow = {
   user: EligibleUser
@@ -255,6 +273,8 @@ export default function AdminStudySessionsPage() {
   }
 
   const [sendingSession, setSendingSession] = useState<string | null>(null)
+  const [reminderModal, setReminderModal] = useState<StudySession | null>(null)
+  const [skipChoices, setSkipChoices] = useState<Set<string>>(new Set())
 
   async function sendAttendanceRequest(sessionId: string) {
     if (!confirm('出欠案内をLINEで送信しますか？')) return
@@ -278,18 +298,30 @@ export default function AdminStudySessionsPage() {
     setSendingSession(null)
   }
 
-  async function sendReminder(sessionId: string) {
-    if (!confirm('未回答者にリマインドを送信しますか？')) return
-    setSendingSession(sessionId)
+  function openReminderModal(session: StudySession) {
+    setSkipChoices(new Set())
+    setReminderModal(session)
+  }
+
+  async function confirmReminder() {
+    const session = reminderModal
+    if (!session) return
+    setSendingSession(session.id)
     try {
+      // チェックされた段階を自動送信スキップに追加
+      if (skipChoices.size > 0) {
+        const merged = Array.from(new Set([...(session.notify_skip ?? []), ...skipChoices]))
+        await createClient().from('study_sessions').update({ notify_skip: merged }).eq('id', session.id)
+      }
       const res = await fetch('/api/line/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, type: 'reminder' }),
+        body: JSON.stringify({ sessionId: session.id, type: 'reminder' }),
       })
       const data = await res.json()
       if (data.success) {
-        alert(`リマインドを${data.sentCount || 0}人に送信しました`)
+        const skipNote = skipChoices.size > 0 ? `\n（${skipChoices.size}件の自動催促を停止しました）` : ''
+        alert(`催促を${data.sentCount || 0}人に送信しました${skipNote}`)
       } else {
         alert(data.message || '送信に失敗しました')
       }
@@ -297,6 +329,8 @@ export default function AdminStudySessionsPage() {
       alert('送信に失敗しました')
     }
     setSendingSession(null)
+    setReminderModal(null)
+    fetchData()
   }
 
   async function triggerReminders() {
@@ -481,7 +515,7 @@ export default function AdminStudySessionsPage() {
                           {sendingSession === session.id ? '送信中...' : '出欠案内'}
                         </button>
                         {pendingCount > 0 && (
-                          <button onClick={() => sendReminder(session.id)}
+                          <button onClick={() => openReminderModal(session)}
                             disabled={sendingSession === session.id}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 transition-colors disabled:opacity-50"
                             title="未回答者に催促">
@@ -665,6 +699,54 @@ export default function AdminStudySessionsPage() {
           <div className="bg-white rounded-xl p-8 shadow-sm text-center text-gray-500">勉強会がありません</div>
         )}
       </div>
+
+      {/* 手動催促モーダル（今後の自動催促をスキップ選択） */}
+      {reminderModal && (() => {
+        const upcoming = upcomingAutoStages(reminderModal).filter((s) => s.willSend)
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setReminderModal(null)}>
+            <div className="bg-white rounded-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+              <h2 className="text-lg font-bold text-gray-800 mb-1">未回答者に催促</h2>
+              <p className="text-sm text-gray-500 mb-4">{reminderModal.title}</p>
+              {upcoming.length > 0 ? (
+                <>
+                  <p className="text-xs text-gray-600 mb-2">
+                    この勉強会の今後の自動催促です。<strong>止めたい段階にチェック</strong>してください（チェックすると自動送信しません）。
+                  </p>
+                  <div className="space-y-2 mb-4">
+                    {upcoming.map((s) => (
+                      <label key={s.flag} className="flex items-center gap-2 text-sm bg-gray-50 rounded-lg px-3 py-2 cursor-pointer">
+                        <input type="checkbox" checked={skipChoices.has(s.flag)}
+                          onChange={(e) => setSkipChoices((prev) => {
+                            const n = new Set(prev)
+                            if (e.target.checked) n.add(s.flag)
+                            else n.delete(s.flag)
+                            return n
+                          })}
+                          className="rounded border-gray-300 text-[#384a8f] focus:ring-[#384a8f]" />
+                        <span className="flex-1">{s.label}</span>
+                        <span className="text-xs text-gray-400">
+                          {s.stageDate.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}頃
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-gray-500 mb-4">この勉強会に今後の自動催促はありません。</p>
+              )}
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setReminderModal(null)}
+                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">閉じる</button>
+                <button onClick={confirmReminder} disabled={sendingSession === reminderModal.id}
+                  className="px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75] disabled:opacity-50">
+                  {sendingSession === reminderModal.id ? '送信中...' : '催促を送信'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

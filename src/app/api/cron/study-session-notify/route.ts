@@ -27,6 +27,7 @@ interface SessionRow {
   two_week_notify_sent_at: string | null
   remind_1week_at: string | null
   remind_1day_at: string | null
+  notify_skip: string[] | null
 }
 
 interface MemberRow {
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const { data: sessions, error } = await supabase
     .from('study_sessions')
-    .select('id, title, session_date, session_time, location, zoom_url, is_online, created_at, notify_1month_at, two_week_notify_sent_at, remind_1week_at, remind_1day_at')
+    .select('id, title, session_date, session_time, location, zoom_url, is_online, created_at, notify_1month_at, two_week_notify_sent_at, remind_1week_at, remind_1day_at, notify_skip')
     .gt('session_date', now.toISOString())
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -102,6 +103,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     for (const st of STAGES) {
       if (session[st.flag]) continue // 送信済み
+      if (session.notify_skip?.includes(st.flag)) continue // スキップ指定
       const stageDate = new Date(sessionDate.getTime() - st.offsetDays * DAY)
       // 段階の時刻が到来済み / 開催前 / 作成時点で既に過去でない
       if (!(now >= stageDate && now < sessionDate && stageDate >= createdAt)) continue

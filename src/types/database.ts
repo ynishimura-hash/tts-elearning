@@ -158,6 +158,11 @@ export interface StudySession {
   reminder_sent: boolean
   auto_notify_enabled: boolean
   two_week_notify_sent_at: string | null
+  // 段階通知エンジン
+  notify_1month_at?: string | null
+  remind_1week_at?: string | null
+  remind_1day_at?: string | null
+  notify_skip?: string[] | null
   created_at: string
   updated_at: string
 }
