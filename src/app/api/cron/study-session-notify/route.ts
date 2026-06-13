@@ -73,10 +73,13 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
 }
 
-function locationInfo(session: SessionRow): string {
-  return session.is_online
-    ? session.zoom_url ? `\nZoom: ${session.zoom_url}` : ''
-    : session.location ? `\n場所: ${session.location}` : ''
+function locationInfo(session: SessionRow, forAttendee: boolean): string {
+  // オンラインのZoom URLは「出席」と答えた人にのみ共有する
+  // （未回答者に渡すと、出欠回答せずに参加できてしまうため）
+  if (session.is_online) {
+    return forAttendee && session.zoom_url ? `\nZoom: ${session.zoom_url}` : ''
+  }
+  return session.location ? `\n場所: ${session.location}` : ''
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -147,7 +150,7 @@ async function runUnanswered(
   const targets = ((eligible || []) as MemberRow[]).filter((u) => !respondedIds.has(u.id))
 
   const dateStr = formatDate(session.session_date)
-  const loc = locationInfo(session)
+  const loc = locationInfo(session, false) // 未回答催促: Zoomは載せない
   let sent = 0
   for (const u of targets) {
     await supabase
@@ -200,7 +203,7 @@ async function runAttendees(
     .in('id', ids)
 
   const dateStr = formatDate(session.session_date)
-  const loc = locationInfo(session)
+  const loc = locationInfo(session, true) // 出席者リマインド: Zoomを載せる
   const nuance = st.offsetDays >= 7 ? 'いよいよ来週、勉強会です。' : '明日はいよいよ勉強会です。'
   let sent = 0
   for (const u of (attendees || []) as MemberRow[]) {
