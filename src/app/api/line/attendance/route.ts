@@ -134,9 +134,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const { lineUserId, channel } = resolveRecipient(user, session.is_online)
         let sent = false
         if (lineUserId) {
-          // オンラインのZoom URLは未回答者に渡さない（出席者リマインドでのみ共有）
+          // Zoom URLは未回答者に渡さない。「Zoomにて開催」とだけ伝える
           const locationInfo = session.is_online
-            ? ''
+            ? '\nZoomにて開催'
             : (session.location ? `\n場所: ${session.location}` : '')
 
           const attendUrl = `https://tts-e.vercel.app${user.is_online ? '/online/study-sessions' : '/study-sessions'}`

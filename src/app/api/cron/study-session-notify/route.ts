@@ -74,10 +74,10 @@ function formatDate(iso: string): string {
 }
 
 function locationInfo(session: SessionRow, forAttendee: boolean): string {
-  // オンラインのZoom URLは「出席」と答えた人にのみ共有する
-  // （未回答者に渡すと、出欠回答せずに参加できてしまうため）
+  // Zoom URL は「出席」と答えた人にのみ共有。未回答者には「Zoomにて開催」とだけ伝える
+  // （URLを渡すと、出欠回答せずに参加できてしまうため）
   if (session.is_online) {
-    return forAttendee && session.zoom_url ? `\nZoom: ${session.zoom_url}` : ''
+    return forAttendee && session.zoom_url ? `\nZoom: ${session.zoom_url}` : '\nZoomにて開催'
   }
   return session.location ? `\n場所: ${session.location}` : ''
 }
