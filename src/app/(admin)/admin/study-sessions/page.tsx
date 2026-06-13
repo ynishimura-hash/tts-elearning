@@ -1,12 +1,34 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin, Edit, Save, X, Send, Bell, Copy, Zap } from 'lucide-react'
 import { formatDate, formatDateWithWeekday, isPastSession } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance, User } from '@/types/database'
 
 type EligibleUser = Pick<User, 'id' | 'full_name' | 'email' | 'is_online' | 'is_admin' | 'is_test' | 'is_free_user' | 'is_tester' | 'study_notify_enabled'>
+
+type AttendanceStatus = 'attending' | 'absent' | 'undecided' | 'pending'
+type RosterRow = {
+  user: EligibleUser
+  status: AttendanceStatus
+  respondedAt: string | null
+  notes: string | null
+  /** 勉強会通知オフ（通知対象外）か */
+  notifyOff: boolean
+}
+
+const STATUS_LABEL: Record<AttendanceStatus, string> = {
+  attending: '出席', absent: '欠席', undecided: '未定', pending: '未回答',
+}
+function statusBadgeClass(status: AttendanceStatus): string {
+  const base = 'text-xs px-2 py-0.5 rounded '
+  if (status === 'attending') return base + 'bg-green-100 text-green-700'
+  if (status === 'absent') return base + 'bg-red-100 text-red-700'
+  if (status === 'undecided') return base + 'bg-yellow-100 text-yellow-700'
+  return base + 'bg-gray-100 text-gray-500'
+}
 
 export default function AdminStudySessionsPage() {
   const [sessions, setSessions] = useState<StudySession[]>([])
@@ -21,6 +43,7 @@ export default function AdminStudySessionsPage() {
     max_participants: '',
   })
   const [expandedSession, setExpandedSession] = useState<string | null>(null)
+  const [showPendingOnly, setShowPendingOnly] = useState(false)
 
   useEffect(() => { fetchData() }, [])
 
@@ -61,6 +84,37 @@ export default function AdminStudySessionsPage() {
       // 対面勉強会 → 対面受講生（テスターは任意参加なので未回答対象に含めない）
       return session.is_online ? u.is_online : !u.is_online
     })
+  }
+
+  /**
+   * セッションの「種別上の対象者」全員に出欠ステータスを付けて返す。
+   * 通知オフ会員も含める（一覧では notifyOff=true で「対象外」表示するため）。
+   * レコードが無い人は status='pending'（未回答）扱い。
+   */
+  function getRoster(session: StudySession): RosterRow[] {
+    const records = attendanceMap[session.id] || []
+    const recByUser = new Map(records.map(r => [r.user_id, r]))
+    return users
+      .filter(u => {
+        if (u.is_admin || u.is_test || u.is_free_user) return false
+        return session.is_online ? u.is_online : !u.is_online
+      })
+      .map<RosterRow>(u => {
+        const r = recByUser.get(u.id)
+        const status = (r?.status as AttendanceStatus) ?? 'pending'
+        return {
+          user: u,
+          status,
+          respondedAt: r?.responded_at ?? null,
+          notes: (r as { notes?: string | null } | undefined)?.notes ?? null,
+          notifyOff: u.study_notify_enabled === false,
+        }
+      })
+      .sort((a, b) => {
+        // 未回答（通知対象）を上、回答済みを中、通知対象外を下に
+        const rank = (x: RosterRow) => (x.notifyOff ? 2 : x.status === 'pending' ? 0 : 1)
+        return rank(a) - rank(b) || a.user.full_name.localeCompare(b.user.full_name, 'ja')
+      })
   }
 
   function startNew() {
@@ -240,6 +294,10 @@ export default function AdminStudySessionsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-800">勉強会管理</h1>
         <div className="flex gap-2">
+          <Link href="/admin/study-sessions/unanswered"
+            className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-sm font-medium hover:bg-rose-100 transition-colors">
+            <Bell className="w-4 h-4" /> 未回答ダッシュボード
+          </Link>
           <button onClick={triggerReminders}
             className="px-4 py-2 bg-[#e39f3c] text-white rounded-lg text-sm font-medium hover:bg-[#d08f30] transition-colors">
             リマインド送信
@@ -332,6 +390,7 @@ export default function AdminStudySessionsPage() {
         {filtered.map((session) => {
           const attendance = attendanceMap[session.id] || []
           const eligibleUsers = getEligibleUsers(session)
+          const roster = getRoster(session)
           const eligibleIds = new Set(eligibleUsers.map(u => u.id))
           // 対象ユーザーの中で集計（テスターや管理者・テストアカウントは除外）
           const eligibleAttendance = attendance.filter(a => eligibleIds.has(a.user_id))
@@ -465,7 +524,7 @@ export default function AdminStudySessionsPage() {
                 )}
 
                 {/* 詳細展開 */}
-                {attendance.length > 0 && (
+                {roster.length > 0 && (
                   <button onClick={() => setExpandedSession(isExpanded ? null : session.id)}
                     className="mt-3 text-sm text-[#384a8f] hover:underline">
                     {isExpanded ? '出欠詳細を閉じる' : '出欠詳細を表示'}
@@ -473,37 +532,52 @@ export default function AdminStudySessionsPage() {
                 )}
               </div>
 
-              {isExpanded && attendance.length > 0 && (
+              {isExpanded && (
                 <div className="border-t px-6 py-4">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-xs text-gray-500 uppercase">
-                        <th className="pb-2">名前</th>
-                        <th className="pb-2">ステータス</th>
-                        <th className="pb-2">備考</th>
-                        <th className="pb-2">回答日</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {attendance.map(a => (
-                        <tr key={a.id}>
-                          <td className="py-2 font-medium text-gray-800">{a.user?.full_name || '不明'}</td>
-                          <td className="py-2">
-                            <span className={`text-xs px-2 py-0.5 rounded ${
-                              a.status === 'attending' ? 'bg-green-100 text-green-700' :
-                              a.status === 'absent' ? 'bg-red-100 text-red-700' :
-                              a.status === 'undecided' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-gray-100 text-gray-500'
-                            }`}>
-                              {{ attending: '出席', absent: '欠席', undecided: '未定', pending: '未回答' }[a.status]}
-                            </span>
-                          </td>
-                          <td className="py-2 text-gray-500 text-xs">{(a as any).notes || '-'}</td>
-                          <td className="py-2 text-gray-500">{a.responded_at ? formatDate(a.responded_at) : '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <label className="flex items-center gap-2 text-xs text-gray-600">
+                      <input type="checkbox" checked={showPendingOnly}
+                        onChange={(e) => setShowPendingOnly(e.target.checked)}
+                        className="rounded border-gray-300 text-[#384a8f] focus:ring-[#384a8f]" />
+                      未回答だけ表示
+                    </label>
+                    <span className="text-xs text-gray-400">
+                      対象 {roster.filter(r => !r.notifyOff).length}名・通知対象外 {roster.filter(r => r.notifyOff).length}名
+                    </span>
+                  </div>
+                  {(() => {
+                    const shown = showPendingOnly
+                      ? roster.filter(r => !r.notifyOff && r.status === 'pending')
+                      : roster
+                    if (shown.length === 0) {
+                      return <p className="text-sm text-gray-400 py-2">{showPendingOnly ? '未回答の方はいません。' : '対象者がいません。'}</p>
+                    }
+                    return (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-xs text-gray-500 uppercase">
+                            <th className="pb-2">名前</th>
+                            <th className="pb-2">ステータス</th>
+                            <th className="pb-2">備考</th>
+                            <th className="pb-2">回答日</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {shown.map(r => (
+                            <tr key={r.user.id} className={r.notifyOff ? 'opacity-50' : ''}>
+                              <td className="py-2 font-medium text-gray-800">
+                                {r.user.full_name}
+                                {r.notifyOff && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-500 align-middle">通知対象外</span>}
+                              </td>
+                              <td className="py-2"><span className={statusBadgeClass(r.status)}>{STATUS_LABEL[r.status]}</span></td>
+                              <td className="py-2 text-gray-500 text-xs">{r.notes || '-'}</td>
+                              <td className="py-2 text-gray-500">{r.respondedAt ? formatDate(r.respondedAt) : '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )
+                  })()}
                 </div>
               )}
             </div>
