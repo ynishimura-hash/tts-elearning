@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin, Edit, Save, X, Send, Bell, Copy, Zap } from 'lucide-react'
+import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin, Edit, Save, X, Send, Bell, Copy, Zap, ChevronDown, ChevronUp } from 'lucide-react'
 import { formatDate, formatDateWithWeekday, isPastSession } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance, User } from '@/types/database'
 
@@ -42,7 +42,15 @@ export default function AdminStudySessionsPage() {
     location: '', zoom_url: '', is_online: false, description: '',
     max_participants: '',
   })
-  const [expandedSession, setExpandedSession] = useState<string | null>(null)
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
+  function toggleExpanded(id: string) {
+    setExpandedSessions((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
   const [showPendingOnly, setShowPendingOnly] = useState(false)
 
   useEffect(() => { fetchData() }, [])
@@ -401,7 +409,7 @@ export default function AdminStudySessionsPage() {
           // ※ レコード自体がない人もカウントされる
           const pendingCount = Math.max(0, eligibleUsers.length - attending.length - absent.length - undecided.length)
           const isPast = isPastSession(session.session_date)
-          const isExpanded = expandedSession === session.id
+          const isExpanded = expandedSessions.has(session.id)
 
           return (
             <div key={session.id} className={`bg-white rounded-xl shadow-sm ${isPast ? 'opacity-60' : ''}`}>
@@ -525,8 +533,9 @@ export default function AdminStudySessionsPage() {
 
                 {/* 詳細展開 */}
                 {roster.length > 0 && (
-                  <button onClick={() => setExpandedSession(isExpanded ? null : session.id)}
-                    className="mt-3 text-sm text-[#384a8f] hover:underline">
+                  <button onClick={() => toggleExpanded(session.id)}
+                    className="mt-3 inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline">
+                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     {isExpanded ? '出欠詳細を閉じる' : '出欠詳細を表示'}
                   </button>
                 )}
