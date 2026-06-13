@@ -81,8 +81,8 @@ export default function AdminStudySessionsPage() {
       if (u.is_free_user) return false
       if (u.study_notify_enabled === false) return false // 通知オフは対象外（カウントから除外）
       // オンライン勉強会 → オンライン受講生
-      // 対面勉強会 → 対面受講生（テスターは任意参加なので未回答対象に含めない）
-      return session.is_online ? u.is_online : !u.is_online
+      // 対面勉強会 → 対面受講生 + テスター（テスターも対面勉強会の参加対象。送信ロジックと一致）
+      return session.is_online ? u.is_online : (!u.is_online || u.is_tester === true)
     })
   }
 
@@ -97,7 +97,7 @@ export default function AdminStudySessionsPage() {
     return users
       .filter(u => {
         if (u.is_admin || u.is_test || u.is_free_user) return false
-        return session.is_online ? u.is_online : !u.is_online
+        return session.is_online ? u.is_online : (!u.is_online || u.is_tester === true)
       })
       .map<RosterRow>(u => {
         const r = recByUser.get(u.id)
@@ -567,6 +567,7 @@ export default function AdminStudySessionsPage() {
                             <tr key={r.user.id} className={r.notifyOff ? 'opacity-50' : ''}>
                               <td className="py-2 font-medium text-gray-800">
                                 {r.user.full_name}
+                                {r.user.is_tester && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600 align-middle">テスター</span>}
                                 {r.notifyOff && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-500 align-middle">通知対象外</span>}
                               </td>
                               <td className="py-2"><span className={statusBadgeClass(r.status)}>{STATUS_LABEL[r.status]}</span></td>
