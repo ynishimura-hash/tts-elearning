@@ -282,19 +282,21 @@ export function Navigation({ mode }: { mode: NavMode }) {
         <div className="p-4 border-t border-white/20 flex-shrink-0">
           {me && (
             <div className="mb-3 px-3 py-2 rounded-lg bg-white/10">
-              <div className="flex items-center gap-2">
-                <User className="w-4 h-4 flex-shrink-0 text-white/60" />
+              <div className="flex items-start gap-2">
+                <User className="w-4 h-4 flex-shrink-0 text-white/60 mt-0.5" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{me.full_name}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-sm font-medium break-all">{me.full_name}</span>
+                    <span className={cn(
+                      'inline-block text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0',
+                      me.is_admin ? 'bg-amber-500 text-white' : 'bg-white/20 text-white/80'
+                    )}>
+                      {me.is_admin ? '管理者' : me.is_free_user ? '無料ユーザー' : me.is_online ? 'オンライン受講生' : '対面受講生'}
+                    </span>
+                  </div>
                   <p className="text-[11px] text-white/60 truncate">{me.email}</p>
                 </div>
               </div>
-              <span className={cn(
-                'mt-1.5 inline-block text-[10px] px-1.5 py-0.5 rounded font-medium',
-                me.is_admin ? 'bg-amber-500 text-white' : 'bg-white/20 text-white/80'
-              )}>
-                {me.is_admin ? '管理者' : me.is_free_user ? '無料ユーザー' : me.is_online ? 'オンライン受講生' : '対面受講生'}
-              </span>
             </div>
           )}
           <button
