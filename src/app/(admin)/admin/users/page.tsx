@@ -6,7 +6,7 @@ import { Search, Eye, Edit, Save, X, Shield, ShieldOff, Trash2, ChevronDown, Che
 import { formatDate, formatDateTime, daysSince } from '@/lib/utils'
 import { ProgressBar } from '@/components/ProgressBar'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
-import type { User } from '@/types/database'
+import type { User, LineChannel } from '@/types/database'
 
 const CHART_COLORS = ['#384a8f', '#e39f3c', '#22c55e', '#8b5cf6', '#ef4444', '#06b6d4', '#f59e0b', '#ec4899']
 
@@ -28,6 +28,8 @@ export default function AdminUsersPage() {
   const [pwInput, setPwInput] = useState('')
   const [pwSaving, setPwSaving] = useState(false)
   const [pwMessage, setPwMessage] = useState<{ ok: boolean; text: string } | null>(null)
+  const [lineTestSending, setLineTestSending] = useState<LineChannel | null>(null)
+  const [lineTestResult, setLineTestResult] = useState<{ ok: boolean; text: string } | null>(null)
 
   // 新規作成
   const [showCreate, setShowCreate] = useState(false)
@@ -50,8 +52,10 @@ export default function AdminUsersPage() {
     if (!selectedUser) {
       setUserCourseProgress([]); setCourseContentDetail({}); setExpandedCourse(null);
       setInitialPayment(null)
+      setLineTestResult(null)
       return
     }
+    setLineTestResult(null)
     const supabase = createClient()
     // 初回入金情報のみ取得（月次は users.last_payment_* に保存）
     supabase
@@ -254,6 +258,41 @@ export default function AdminUsersPage() {
       setPwMessage({ ok: false, text: '通信エラーが発生しました' })
     }
     setPwSaving(false)
+  }
+
+  async function handleLineTest(channel: LineChannel) {
+    if (!selectedUser) return
+    setLineTestSending(channel)
+    setLineTestResult(null)
+    const channelLabel = channel === 'online' ? 'オンライン' : '対面'
+    try {
+      const res = await fetch(`/api/admin/users/${selectedUser.id}/line-test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setLineTestResult({
+          ok: true,
+          text: `${channelLabel}公式LINE にテスト送信しました。実際に届いたかご確認ください。`,
+        })
+      } else {
+        const reasons: Record<string, string> = {
+          not_linked: 'このチャネルは未連携です。',
+          push_failed: 'LINE送信に失敗しました（トークン未設定、またはブロック等で届きません）。',
+          not_found: 'ユーザーが見つかりません。',
+          forbidden: '権限がありません。',
+          invalid_input: 'リクエストが不正です。',
+          server_error: 'サーバーエラーが発生しました。',
+        }
+        setLineTestResult({ ok: false, text: reasons[data.reason] || '送信に失敗しました。' })
+      }
+    } catch {
+      setLineTestResult({ ok: false, text: '通信エラーが発生しました。' })
+    } finally {
+      setLineTestSending(null)
+    }
   }
 
   async function handleSaveUser(e: React.FormEvent) {
@@ -477,6 +516,42 @@ export default function AdminUsersPage() {
               <div className="col-span-2"><span className="text-gray-500">最終学習コンテンツ:</span> <span className="font-medium">{selectedUser.last_content || '-'}</span></div>
               {selectedUser.drive_folder_url && (
                 <div className="col-span-2"><span className="text-gray-500">Driveフォルダ:</span> <a href={selectedUser.drive_folder_url} target="_blank" rel="noopener noreferrer" className="text-[#384a8f] hover:underline font-medium ml-1">開く</a></div>
+              )}
+            </div>
+
+            {/* LINE連携 / テスト送信 */}
+            <div className="mt-6 pt-4 border-t">
+              <h3 className="font-bold text-gray-800 text-sm mb-3">💬 LINE連携</h3>
+              <div className="space-y-2">
+                {([
+                  { ch: 'online' as LineChannel, label: 'オンライン公式LINE', lineId: selectedUser.line_user_id_online },
+                  { ch: 'offline' as LineChannel, label: '対面公式LINE', lineId: selectedUser.line_user_id_offline },
+                ]).map(({ ch, label, lineId }) => (
+                  <div key={ch} className="flex items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-gray-700">{label}</span>
+                      {lineId ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-700 text-xs font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> 連携済み
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">未連携</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleLineTest(ch)}
+                      disabled={!lineId || lineTestSending !== null}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg bg-[#06C755] text-white hover:bg-[#05a548] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {lineTestSending === ch ? '送信中...' : 'テスト送信'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {lineTestResult && (
+                <p className={`mt-2 text-xs ${lineTestResult.ok ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  {lineTestResult.text}
+                </p>
               )}
             </div>
 
