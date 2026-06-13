@@ -16,7 +16,7 @@ import { ArrowLeft, CalendarDays, Send, Bell, CheckCircle2, MapPin, Video } from
 
 type RosterUser = Pick<
   User,
-  'id' | 'full_name' | 'is_online' | 'is_admin' | 'is_test' | 'is_free_user' | 'is_tester' | 'study_notify_enabled'
+  'id' | 'full_name' | 'is_online' | 'is_admin' | 'is_test' | 'is_free_user' | 'is_tester' | 'is_verifier' | 'study_notify_enabled'
 >
 interface AttendanceRow {
   user_id: string
@@ -43,7 +43,7 @@ export default function UnansweredDashboardPage() {
       supabase.from('study_session_attendance').select('user_id, session_id, status'),
       supabase
         .from('users')
-        .select('id, full_name, is_online, is_admin, is_test, is_free_user, is_tester, study_notify_enabled'),
+        .select('id, full_name, is_online, is_admin, is_test, is_free_user, is_tester, is_verifier, study_notify_enabled'),
     ])
     if (s.data) setSessions(s.data)
     if (a.data) setAttendance(a.data as AttendanceRow[])
@@ -54,7 +54,7 @@ export default function UnansweredDashboardPage() {
   /** セッションの種別上の対象者（admin/test/free除外） */
   function targetsOf(session: StudySession): RosterUser[] {
     return users.filter((usr) => {
-      if (usr.is_admin || usr.is_test || usr.is_free_user) return false
+      if (usr.is_admin || usr.is_test || usr.is_free_user || usr.is_verifier) return false
       return session.is_online ? usr.is_online : (!usr.is_online || usr.is_tester === true)
     })
   }

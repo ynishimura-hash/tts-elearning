@@ -7,7 +7,7 @@ import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin
 import { formatDate, formatDateWithWeekday, isPastSession } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance, User } from '@/types/database'
 
-type EligibleUser = Pick<User, 'id' | 'full_name' | 'email' | 'is_online' | 'is_admin' | 'is_test' | 'is_free_user' | 'is_tester' | 'study_notify_enabled'>
+type EligibleUser = Pick<User, 'id' | 'full_name' | 'email' | 'is_online' | 'is_admin' | 'is_test' | 'is_free_user' | 'is_tester' | 'is_verifier' | 'study_notify_enabled'>
 
 type NotificationLog = { stage: string; channel: string | null; full_name: string | null; success: boolean; created_at: string }
 const STAGE_LABEL: Record<string, string> = {
@@ -116,7 +116,7 @@ export default function AdminStudySessionsPage() {
     const { data: allAttendance } = await supabase
       .from('study_session_attendance').select('*')
     const { data: allUsers } = await supabase
-      .from('users').select('id, full_name, email, is_online, is_admin, is_test, is_free_user, is_tester, study_notify_enabled')
+      .from('users').select('id, full_name, email, is_online, is_admin, is_test, is_free_user, is_tester, is_verifier, study_notify_enabled')
 
     if (allAttendance && allUsers) {
       setUsers(allUsers as EligibleUser[])
@@ -138,6 +138,7 @@ export default function AdminStudySessionsPage() {
       if (u.is_admin) return false
       if (u.is_test) return false
       if (u.is_free_user) return false
+      if (u.is_verifier) return false // 確認用アカウントは未回答に出さない
       if (u.study_notify_enabled === false) return false // 通知オフは対象外（カウントから除外）
       // オンライン勉強会 → オンライン受講生
       // 対面勉強会 → 対面受講生 + テスター（テスターも対面勉強会の参加対象。送信ロジックと一致）
@@ -155,7 +156,7 @@ export default function AdminStudySessionsPage() {
     const recByUser = new Map(records.map(r => [r.user_id, r]))
     return users
       .filter(u => {
-        if (u.is_admin || u.is_test || u.is_free_user) return false
+        if (u.is_admin || u.is_test || u.is_free_user || u.is_verifier) return false
         return session.is_online ? u.is_online : (!u.is_online || u.is_tester === true)
       })
       .map<RosterRow>(u => {
