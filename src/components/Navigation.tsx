@@ -54,7 +54,7 @@ const navItems: Record<NavMode, NavItem[]> = {
     { href: '/admin/blog', label: 'ブログ管理', icon: FileText },
     { href: '/admin/qa', label: 'Q&A管理', icon: HelpCircle },
     { href: '/admin/applications', label: '申込管理', icon: UserPlus, badgeKey: 'applicationsPending' },
-    { href: '/admin/line-groups', label: 'LINEグループ', icon: MessageCircle },
+    { href: '/admin/line-broadcast', label: 'LINE配信', icon: MessageCircle },
     { href: '/admin/broadcasts', label: 'メール配信', icon: Mail },
   ],
   free: [
