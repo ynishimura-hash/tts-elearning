@@ -9,6 +9,16 @@ import type { StudySession, StudySessionAttendance, User } from '@/types/databas
 
 type EligibleUser = Pick<User, 'id' | 'full_name' | 'email' | 'is_online' | 'is_admin' | 'is_test' | 'is_free_user' | 'is_tester' | 'study_notify_enabled'>
 
+type NotificationLog = { stage: string; channel: string | null; full_name: string | null; success: boolean; created_at: string }
+const STAGE_LABEL: Record<string, string> = {
+  invite_manual: '出欠案内（手動）',
+  manual_reminder: '催促（手動）',
+  remind_1month: '1ヶ月前 催促',
+  remind_2week: '2週間前 催促',
+  attend_1week: '1週間前 リマインド',
+  attend_1day: '1日前 リマインド',
+}
+
 type AttendanceStatus = 'attending' | 'absent' | 'undecided' | 'pending'
 type RosterRow = {
   user: EligibleUser
@@ -52,6 +62,29 @@ export default function AdminStudySessionsPage() {
     })
   }
   const [showPendingOnly, setShowPendingOnly] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState<Set<string>>(new Set())
+  const [historyData, setHistoryData] = useState<Record<string, NotificationLog[]>>({})
+  const [historyLoading, setHistoryLoading] = useState<string | null>(null)
+  async function toggleHistory(sessionId: string) {
+    setHistoryOpen((prev) => {
+      const next = new Set(prev)
+      if (next.has(sessionId)) next.delete(sessionId)
+      else next.add(sessionId)
+      return next
+    })
+    if (!historyData[sessionId]) {
+      setHistoryLoading(sessionId)
+      try {
+        const res = await fetch(`/api/admin/study-sessions/${sessionId}/notifications`)
+        const data = await res.json()
+        if (data.success) setHistoryData((prev) => ({ ...prev, [sessionId]: data.notifications }))
+      } catch {
+        // 取得失敗は無視
+      } finally {
+        setHistoryLoading(null)
+      }
+    }
+  }
 
   useEffect(() => { fetchData() }, [])
 
@@ -531,14 +564,21 @@ export default function AdminStudySessionsPage() {
                   </div>
                 )}
 
-                {/* 詳細展開 */}
-                {roster.length > 0 && (
-                  <button onClick={() => toggleExpanded(session.id)}
-                    className="mt-3 inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline">
-                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    {isExpanded ? '出欠詳細を閉じる' : '出欠詳細を表示'}
+                {/* 詳細展開 + 送信履歴 */}
+                <div className="mt-3 flex items-center gap-4 flex-wrap">
+                  {roster.length > 0 && (
+                    <button onClick={() => toggleExpanded(session.id)}
+                      className="inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline">
+                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      {isExpanded ? '出欠詳細を閉じる' : '出欠詳細を表示'}
+                    </button>
+                  )}
+                  <button onClick={() => toggleHistory(session.id)}
+                    className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-[#384a8f] hover:underline">
+                    {historyOpen.has(session.id) ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    送信履歴
                   </button>
-                )}
+                </div>
               </div>
 
               {isExpanded && (
@@ -588,6 +628,34 @@ export default function AdminStudySessionsPage() {
                       </table>
                     )
                   })()}
+                </div>
+              )}
+
+              {historyOpen.has(session.id) && (
+                <div className="border-t px-6 py-4">
+                  <h4 className="text-xs font-bold text-gray-600 mb-2">送信履歴（いつ・どの段階・誰宛て）</h4>
+                  {historyLoading === session.id && !historyData[session.id] ? (
+                    <p className="text-xs text-gray-400">読み込み中...</p>
+                  ) : (historyData[session.id]?.length ?? 0) === 0 ? (
+                    <p className="text-xs text-gray-400">まだ送信履歴はありません。</p>
+                  ) : (
+                    <div className="space-y-1 max-h-72 overflow-y-auto">
+                      {historyData[session.id].map((h, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs py-0.5">
+                          <span className="text-gray-400 w-28 flex-shrink-0">
+                            {new Date(h.created_at).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span className="inline-block w-32 flex-shrink-0 px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                            {STAGE_LABEL[h.stage] || h.stage}
+                          </span>
+                          <span className="flex-1 text-gray-700 truncate">{h.full_name || '-'}</span>
+                          <span className={`flex-shrink-0 ${h.success ? 'text-emerald-600' : 'text-rose-500'}`}>
+                            {h.success ? '送信' : '未達'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

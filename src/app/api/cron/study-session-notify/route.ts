@@ -1,17 +1,81 @@
+/**
+ * 勉強会 段階通知エンジン（Vercel Cron で 1日1回）
+ *
+ * 各勉強会の開催日を基準に、未送信の段階を自動送信する:
+ *   - 1ヶ月前 / 2週間前 → 未回答者へ「催促」
+ *   - 1週間前 / 1日前   → 出席者へ「リマインド」（オンライン=Zoom / 対面=場所）
+ *
+ * 作成が段階より直前の場合（stageDate < created_at）はその段階をスキップ。
+ * cron が1日落ちても stageDate を過ぎていれば追いつく（送信済みフラグで二重送信は防止）。
+ * 送信は1件ずつ study_session_notifications に記録（履歴）。
+ */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { pushLineMessage } from '@/lib/line-push'
+import type { LineChannel } from '@/types/database'
 
-// 2週間前の勉強会自動LINE配信 (Vercel Cron で 1日1回呼ぶ)
-// auto_notify_enabled=true, two_week_notify_sent_at IS NULL の
-// session_date が今日から14日後 ± 1日に該当するものを対象に通知。
-
-interface NotifyResult {
-  session_id: string
+interface SessionRow {
+  id: string
   title: string
+  session_date: string
+  session_time: string | null
+  location: string | null
+  zoom_url: string | null
   is_online: boolean
-  sent: number
-  errors: string[]
+  created_at: string
+  notify_1month_at: string | null
+  two_week_notify_sent_at: string | null
+  remind_1week_at: string | null
+  remind_1day_at: string | null
+}
+
+interface MemberRow {
+  id: string
+  full_name: string
+  line_user_id_online: string | null
+  line_user_id_offline: string | null
+  is_online: boolean
+  is_tester: boolean
+}
+
+const DAY = 24 * 60 * 60 * 1000
+
+type StageType = 'unanswered' | 'attendees'
+interface StageDef {
+  flag: 'notify_1month_at' | 'two_week_notify_sent_at' | 'remind_1week_at' | 'remind_1day_at'
+  offsetDays: number
+  type: StageType
+  stage: string
+  label: string
+}
+
+const STAGES: StageDef[] = [
+  { flag: 'notify_1month_at', offsetDays: 30, type: 'unanswered', stage: 'remind_1month', label: '1ヶ月前催促' },
+  { flag: 'two_week_notify_sent_at', offsetDays: 14, type: 'unanswered', stage: 'remind_2week', label: '2週間前催促' },
+  { flag: 'remind_1week_at', offsetDays: 7, type: 'attendees', stage: 'attend_1week', label: '1週間前リマインド' },
+  { flag: 'remind_1day_at', offsetDays: 1, type: 'attendees', stage: 'attend_1day', label: '1日前リマインド' },
+]
+
+function getSupabase() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
+
+function resolveRecipient(u: MemberRow, sessionIsOnline: boolean): { lineUserId: string | null; channel: LineChannel } {
+  const useOnline = sessionIsOnline || u.is_tester === true
+  return {
+    lineUserId: useOnline ? u.line_user_id_online : u.line_user_id_offline,
+    channel: useOnline ? 'online' : 'offline',
+  }
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })
+}
+
+function locationInfo(session: SessionRow): string {
+  return session.is_online
+    ? session.zoom_url ? `\nZoom: ${session.zoom_url}` : ''
+    : session.location ? `\n場所: ${session.location}` : ''
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -21,124 +85,139 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
+  const supabase = getSupabase()
   const now = new Date()
-  const targetFrom = new Date(now.getTime() + 13 * 24 * 60 * 60 * 1000)
-  const targetTo = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000)
 
-  const { data: sessions, error: fetchError } = await supabase
+  const { data: sessions, error } = await supabase
     .from('study_sessions')
-    .select('*')
-    .eq('auto_notify_enabled', true)
-    .is('two_week_notify_sent_at', null)
-    .gte('session_date', targetFrom.toISOString())
-    .lte('session_date', targetTo.toISOString())
+    .select('id, title, session_date, session_time, location, zoom_url, is_online, created_at, notify_1month_at, two_week_notify_sent_at, remind_1week_at, remind_1day_at')
+    .gt('session_date', now.toISOString())
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  if (fetchError) {
-    return NextResponse.json({ error: fetchError.message }, { status: 500 })
+  const results: { session: string; stage: string; sent: number; targets: number }[] = []
+
+  for (const session of (sessions || []) as SessionRow[]) {
+    const sessionDate = new Date(session.session_date)
+    const createdAt = new Date(session.created_at)
+
+    for (const st of STAGES) {
+      if (session[st.flag]) continue // 送信済み
+      const stageDate = new Date(sessionDate.getTime() - st.offsetDays * DAY)
+      // 段階の時刻が到来済み / 開催前 / 作成時点で既に過去でない
+      if (!(now >= stageDate && now < sessionDate && stageDate >= createdAt)) continue
+
+      const res =
+        st.type === 'unanswered'
+          ? await runUnanswered(supabase, session, st)
+          : await runAttendees(supabase, session, st)
+
+      await supabase.from('study_sessions').update({ [st.flag]: new Date().toISOString() }).eq('id', session.id)
+      results.push({ session: session.title, stage: st.label, sent: res.sent, targets: res.targets })
+    }
   }
 
-  if (!sessions || sessions.length === 0) {
-    return NextResponse.json({ message: '対象の勉強会なし', target_count: 0, results: [] })
-  }
-
-  const results: NotifyResult[] = []
-
-  for (const session of sessions) {
-    const result: NotifyResult = {
-      session_id: session.id,
-      title: session.title,
-      is_online: session.is_online,
-      sent: 0,
-      errors: [],
-    }
-
-    // 対象ユーザー: テスト・管理者を除く、当該タイプの受講生
-    // リアル勉強会の場合: オフラインユーザー + テスター
-    // オンライン勉強会の場合: オンラインユーザー
-    const usersQuery = supabase
-      .from('users')
-      .select('id, line_user_id_online, line_user_id_offline, full_name, is_online, is_tester')
-      .eq('is_admin', false)
-      .eq('is_test', false)
-      .eq('study_notify_enabled', true) // 通知オフの会員は対象外
-
-    const { data: users } = session.is_online
-      ? await usersQuery.eq('is_online', true)
-      : await usersQuery.or('is_online.eq.false,is_tester.eq.true')
-
-    if (!users || users.length === 0) {
-      result.errors.push('対象ユーザーなし')
-      results.push(result)
-      continue
-    }
-
-    const sessionDate = new Date(session.session_date).toLocaleDateString('ja-JP', {
-      year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
-    })
-
-    for (const user of users) {
-      // 出欠レコード作成（pending）
-      await supabase
-        .from('study_session_attendance')
-        .upsert({
-          session_id: session.id,
-          user_id: user.id,
-          status: 'pending',
-        }, { onConflict: 'session_id,user_id' })
-
-      // チャネル別送信先を決定
-      // - オンライン勉強会: 全員 online チャネルから
-      // - 対面勉強会:
-      //   - テスター（is_tester=true）→ オンライン公式LINE から（テスターはオンライン側のみ友だち登録）
-      //   - その他オフライン会員 → オフライン公式LINE から
-      const useOnlineChannel = session.is_online || user.is_tester === true
-      const lineUserId = useOnlineChannel
-        ? user.line_user_id_online
-        : user.line_user_id_offline
-      const channel = useOnlineChannel ? 'online' : 'offline'
-
-      if (lineUserId) {
-        const locationInfo = session.is_online
-          ? (session.zoom_url ? `\nZoom: ${session.zoom_url}` : '')
-          : (session.location ? `\n場所: ${session.location}` : '')
-
-        const message =
-          `【勉強会のご案内（2週間前）】\n\n` +
-          `${session.title}\n` +
-          `日時: ${sessionDate}\n` +
-          `時間: ${session.session_time || '未定'}${locationInfo}\n\n` +
-          `出欠のご回答をお願いいたします。`
-
-        const sent = await pushLineMessage(lineUserId, message, channel)
-        if (sent) result.sent++
-      }
-    }
-
-    // 配信済みフラグ更新
-    await supabase
-      .from('study_sessions')
-      .update({ two_week_notify_sent_at: new Date().toISOString() })
-      .eq('id', session.id)
-
-    results.push(result)
-  }
-
-  return NextResponse.json({
-    message: `${sessions.length}件の勉強会に2週間前通知を実行`,
-    target_count: sessions.length,
-    results,
-  })
+  return NextResponse.json({ ok: true, executed: results })
 }
 
-// 動作確認用 GET（cron secret なしでも呼べる、結果は返さない）
+/** 未回答者への催促（1ヶ月前 / 2週間前） */
+async function runUnanswered(
+  supabase: ReturnType<typeof getSupabase>,
+  session: SessionRow,
+  st: StageDef
+): Promise<{ sent: number; targets: number }> {
+  const base = supabase
+    .from('users')
+    .select('id, full_name, line_user_id_online, line_user_id_offline, is_online, is_tester')
+    .eq('is_admin', false)
+    .eq('is_test', false)
+    .eq('study_notify_enabled', true)
+  const { data: eligible } = session.is_online
+    ? await base.eq('is_online', true)
+    : await base.or('is_online.eq.false,is_tester.eq.true')
+
+  const { data: att } = await supabase
+    .from('study_session_attendance')
+    .select('user_id, status')
+    .eq('session_id', session.id)
+  const respondedIds = new Set(
+    (att || []).filter((a) => a.status === 'attending' || a.status === 'absent' || a.status === 'undecided').map((a) => a.user_id)
+  )
+  const targets = ((eligible || []) as MemberRow[]).filter((u) => !respondedIds.has(u.id))
+
+  const dateStr = formatDate(session.session_date)
+  const loc = locationInfo(session)
+  let sent = 0
+  for (const u of targets) {
+    await supabase
+      .from('study_session_attendance')
+      .upsert({ session_id: session.id, user_id: u.id, status: 'pending' }, { onConflict: 'session_id,user_id' })
+
+    const { lineUserId, channel } = resolveRecipient(u, session.is_online)
+    let ok = false
+    if (lineUserId) {
+      const msg =
+        `【勉強会の出欠 ご回答のお願い】\n\n` +
+        `${session.title}\n日時: ${dateStr}\n時間: ${session.session_time || '未定'}${loc}\n\n` +
+        `まだ出欠のご回答をいただいておりません。お手数ですがご回答をお願いいたします。`
+      ok = await pushLineMessage(lineUserId, msg, channel)
+      if (ok) sent++
+    }
+    await supabase
+      .from('study_session_notifications')
+      .insert({ session_id: session.id, stage: st.stage, channel, user_id: u.id, full_name: u.full_name, success: ok })
+    if (ok) {
+      await supabase
+        .from('study_session_attendance')
+        .update({ last_reminder_at: new Date().toISOString() })
+        .eq('session_id', session.id)
+        .eq('user_id', u.id)
+    }
+  }
+  return { sent, targets: targets.length }
+}
+
+/** 出席者へのリマインド（1週間前 / 1日前・Zoom/場所付き） */
+async function runAttendees(
+  supabase: ReturnType<typeof getSupabase>,
+  session: SessionRow,
+  st: StageDef
+): Promise<{ sent: number; targets: number }> {
+  const { data: att } = await supabase
+    .from('study_session_attendance')
+    .select('user_id')
+    .eq('session_id', session.id)
+    .eq('status', 'attending')
+  const ids = (att || []).map((a) => a.user_id)
+  if (ids.length === 0) return { sent: 0, targets: 0 }
+
+  const { data: attendees } = await supabase
+    .from('users')
+    .select('id, full_name, line_user_id_online, line_user_id_offline, is_online, is_tester')
+    .in('id', ids)
+
+  const dateStr = formatDate(session.session_date)
+  const loc = locationInfo(session)
+  const nuance = st.offsetDays >= 7 ? 'いよいよ来週、勉強会です。' : '明日はいよいよ勉強会です。'
+  let sent = 0
+  for (const u of (attendees || []) as MemberRow[]) {
+    const { lineUserId, channel } = resolveRecipient(u, session.is_online)
+    let ok = false
+    if (lineUserId) {
+      const msg =
+        `【勉強会リマインド】\n\n` +
+        `${session.title}\n日時: ${dateStr}\n時間: ${session.session_time || '未定'}${loc}\n\n` +
+        `${nuance}当日お待ちしております。`
+      ok = await pushLineMessage(lineUserId, msg, channel)
+      if (ok) sent++
+    }
+    await supabase
+      .from('study_session_notifications')
+      .insert({ session_id: session.id, stage: st.stage, channel, user_id: u.id, full_name: u.full_name, success: ok })
+  }
+  return { sent, targets: ids.length }
+}
+
+// 動作確認用 GET
 export async function GET(): Promise<NextResponse> {
-  return NextResponse.json({
-    ok: true,
-    hint: 'POST with Bearer CRON_SECRET to trigger 2-week notifications',
-  })
+  return NextResponse.json({ ok: true, hint: 'POST with Bearer CRON_SECRET. Stages: 1month/2week=unanswered, 1week/1day=attendees' })
 }

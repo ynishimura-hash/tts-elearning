@@ -97,11 +97,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
       for (const user of targetUsers) {
         const { lineUserId, channel } = resolveRecipient(user, session.is_online)
-        if (!lineUserId) continue
-
-        const message = `【リマインド】${session.title}\n\n${sessionDate}\n${session.session_time || ''}\n\nまだ出欠のご回答をいただいておりません。\nお手数ですがご回答をお願いいたします。`
-        const sent = await pushLineMessage(lineUserId, message, channel)
-        if (sent) sentCount++
+        let sent = false
+        if (lineUserId) {
+          const message = `【リマインド】${session.title}\n\n${sessionDate}\n${session.session_time || ''}\n\nまだ出欠のご回答をいただいておりません。\nお手数ですがご回答をお願いいたします。`
+          sent = await pushLineMessage(lineUserId, message, channel)
+          if (sent) sentCount++
+        }
+        await supabase.from('study_session_notifications').insert({
+          session_id: sessionId, stage: 'manual_reminder', channel, user_id: user.id, full_name: user.full_name, success: sent,
+        })
       }
 
       // リマインドカウント更新
@@ -127,15 +131,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           }, { onConflict: 'session_id,user_id' })
 
         const { lineUserId, channel } = resolveRecipient(user, session.is_online)
-        if (!lineUserId) continue
+        let sent = false
+        if (lineUserId) {
+          const locationInfo = session.is_online
+            ? (session.zoom_url ? `\nZoom: ${session.zoom_url}` : '')
+            : (session.location ? `\n場所: ${session.location}` : '')
 
-        const locationInfo = session.is_online
-          ? (session.zoom_url ? `\nZoom: ${session.zoom_url}` : '')
-          : (session.location ? `\n場所: ${session.location}` : '')
-
-        const message = `【勉強会のご案内】\n\n${session.title}\n日時: ${sessionDate}\n時間: ${session.session_time || '未定'}${locationInfo}\n\n出欠のご回答をお願いいたします。`
-        const sent = await pushLineMessage(lineUserId, message, channel)
-        if (sent) sentCount++
+          const message = `【勉強会のご案内】\n\n${session.title}\n日時: ${sessionDate}\n時間: ${session.session_time || '未定'}${locationInfo}\n\n出欠のご回答をお願いいたします。`
+          sent = await pushLineMessage(lineUserId, message, channel)
+          if (sent) sentCount++
+        }
+        await supabase.from('study_session_notifications').insert({
+          session_id: sessionId, stage: 'invite_manual', channel, user_id: user.id, full_name: user.full_name, success: sent,
+        })
       }
 
       // 送信済みフラグ更新
