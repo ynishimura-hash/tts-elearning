@@ -10,6 +10,28 @@ import type { User, LineChannel } from '@/types/database'
 
 const CHART_COLORS = ['#384a8f', '#e39f3c', '#22c55e', '#8b5cf6', '#ef4444', '#06b6d4', '#f59e0b', '#ec4899']
 
+// 一覧の並び順グループ。会員（オンライン→対面）を上に、無料→休会→管理者→テスト→退会を下に。
+function userGroupRank(u: User): number {
+  if (u.is_admin) return 5                                              // 管理者
+  if (u.is_test) return 6                                               // テスト
+  if (u.withdrew_at && new Date(u.withdrew_at) <= new Date()) return 7  // 退会（期限切れ）
+  if (u.is_on_leave) return 4                                           // 休会
+  if (u.is_free_user) return 3                                          // 無料
+  if (u.is_online) return 1                                             // オンライン会員
+  return 2                                                              // 対面会員
+}
+function userCustomerIdNum(u: User): number {
+  const n = parseInt(u.customer_id ?? '', 10)
+  return Number.isNaN(n) ? Number.MAX_SAFE_INTEGER : n
+}
+function compareUsersForList(a: User, b: User): number {
+  const ra = userGroupRank(a), rb = userGroupRank(b)
+  if (ra !== rb) return ra - rb
+  const ca = userCustomerIdNum(a), cb = userCustomerIdNum(b)
+  if (ca !== cb) return ca - cb
+  return (a.full_name || '').localeCompare(b.full_name || '', 'ja')
+}
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [search, setSearch] = useState('')
@@ -365,7 +387,7 @@ export default function AdminUsersPage() {
         (u.customer_id && u.customer_id.toLowerCase().includes(s))
     }
     return true
-  })
+  }).sort(compareUsersForList)
 
   return (
     <div className="space-y-6 pt-12 lg:pt-0">
