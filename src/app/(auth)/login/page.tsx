@@ -58,6 +58,13 @@ export default function LoginPage() {
         .update({ last_login_at: new Date().toISOString() })
         .eq('auth_id', user.id)
 
+      // 遷移先指定（?next=）があれば優先（LINEの出欠リンク等からの導線）
+      const next = new URLSearchParams(window.location.search).get('next')
+      if (next && next.startsWith('/') && !next.startsWith('//')) {
+        router.push(next)
+        return
+      }
+
       if (profile.is_admin) {
         router.push('/admin')
       } else if (profile.is_free_user) {

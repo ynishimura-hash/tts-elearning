@@ -155,10 +155,12 @@ async function runUnanswered(
     const { lineUserId, channel } = resolveRecipient(u, session.is_online)
     let ok = false
     if (lineUserId) {
+      const attendUrl = `https://tts-e.vercel.app${u.is_online ? '/online/study-sessions' : '/study-sessions'}`
       const msg =
         `【勉強会の出欠 ご回答のお願い】\n\n` +
         `${session.title}\n日時: ${dateStr}\n時間: ${session.session_time || '未定'}${loc}\n\n` +
-        `まだ出欠のご回答をいただいておりません。お手数ですがご回答をお願いいたします。`
+        `まだ出欠のご回答をいただいておりません。お手数ですがご回答をお願いいたします。\n\n` +
+        `▼ 出欠の回答はこちら\n${attendUrl}`
       ok = await pushLineMessage(lineUserId, msg, channel)
       if (ok) sent++
     }

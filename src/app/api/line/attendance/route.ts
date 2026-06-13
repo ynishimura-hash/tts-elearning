@@ -99,7 +99,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const { lineUserId, channel } = resolveRecipient(user, session.is_online)
         let sent = false
         if (lineUserId) {
-          const message = `【リマインド】${session.title}\n\n${sessionDate}\n${session.session_time || ''}\n\nまだ出欠のご回答をいただいておりません。\nお手数ですがご回答をお願いいたします。`
+          const attendUrl = `https://tts-e.vercel.app${user.is_online ? '/online/study-sessions' : '/study-sessions'}`
+          const message = `【リマインド】${session.title}\n\n${sessionDate}\n${session.session_time || ''}\n\nまだ出欠のご回答をいただいておりません。\nお手数ですがご回答をお願いいたします。\n\n▼ 出欠の回答はこちら\n${attendUrl}`
           sent = await pushLineMessage(lineUserId, message, channel)
           if (sent) sentCount++
         }
@@ -137,7 +138,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             ? (session.zoom_url ? `\nZoom: ${session.zoom_url}` : '')
             : (session.location ? `\n場所: ${session.location}` : '')
 
-          const message = `【勉強会のご案内】\n\n${session.title}\n日時: ${sessionDate}\n時間: ${session.session_time || '未定'}${locationInfo}\n\n出欠のご回答をお願いいたします。`
+          const attendUrl = `https://tts-e.vercel.app${user.is_online ? '/online/study-sessions' : '/study-sessions'}`
+          const message = `【勉強会のご案内】\n\n${session.title}\n日時: ${sessionDate}\n時間: ${session.session_time || '未定'}${locationInfo}\n\n出欠のご回答をお願いいたします。\n\n▼ 出欠の回答はこちら\n${attendUrl}`
           sent = await pushLineMessage(lineUserId, message, channel)
           if (sent) sentCount++
         }
