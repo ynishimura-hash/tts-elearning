@@ -163,10 +163,11 @@ export async function handleLineWebhook(
       await pushLineMessage(
         lineUserId,
         `TTS会員アカウントとLINEの連携を行います。\n\n` +
-          `下記URLから氏名と電話番号を入力してください。\n\n` +
+          `下記URLを開き、TTSアカウントにログインしてください。\n` +
+          `ログインすると連携が完了します。\n\n` +
           `${linkUrl}\n\n` +
-          `※ このURLは7日間有効です。\n` +
-          `※ ご登録時の氏名・電話番号が必要です。`,
+          `※ ログインは、ご登録時のメールアドレスとパスワードです。\n` +
+          `※ このURLは7日間有効です。`,
         channel
       )
       continue

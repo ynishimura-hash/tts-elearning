@@ -80,7 +80,7 @@ export function LineLinkButton({ channel, lineUserId, variant }: LineLinkButtonP
         <li>
           2. トーク画面で「<span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded">連携</span>」と送信
         </li>
-        <li>3. 返信されたURLで氏名と電話番号を入力</li>
+        <li>3. 返信されたURLを開き、ログインして連携</li>
       </ol>
 
       {oaUrl ? (
