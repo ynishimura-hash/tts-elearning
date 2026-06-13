@@ -62,6 +62,18 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
+    // 管理者以外は /admin 配下に入れない
+    // （ページ側・レイアウトに is_admin ガードが無いため、ここで一括遮断する）
+    if (request.nextUrl.pathname.startsWith('/admin') && profile?.is_admin !== true) {
+      const url = request.nextUrl.clone()
+      url.pathname = profile?.is_free_user
+        ? '/free/home'
+        : profile?.is_online
+          ? '/online/home'
+          : '/home'
+      return NextResponse.redirect(url)
+    }
+
     // ログインページにアクセスしたら適切なホームへ
     if (request.nextUrl.pathname === '/login') {
       const url = request.nextUrl.clone()
