@@ -80,6 +80,33 @@ export function Navigation({ mode }: { mode: NavMode }) {
     studySessionsUnanswered: 0,
   })
   const items = navItems[mode]
+  const [me, setMe] = useState<{
+    full_name: string; email: string; is_admin: boolean; is_online: boolean; is_free_user: boolean
+  } | null>(null)
+
+  // ログイン中アカウントを取得（誰でログインしているかを常に明示する）
+  useEffect(() => {
+    const supabase = createClient()
+    let cancelled = false
+    ;(async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user || cancelled) return
+      const { data: profile } = await supabase
+        .from('users')
+        .select('full_name, email, is_admin, is_online, is_free_user')
+        .eq('auth_id', user.id)
+        .maybeSingle()
+      if (cancelled) return
+      setMe({
+        full_name: profile?.full_name || '(プロフィール未登録)',
+        email: profile?.email || user.email || '',
+        is_admin: profile?.is_admin ?? false,
+        is_online: profile?.is_online ?? false,
+        is_free_user: profile?.is_free_user ?? false,
+      })
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   // 管理者用バッジ件数を取得（30秒ごと再取得）
   useEffect(() => {
@@ -243,6 +270,23 @@ export function Navigation({ mode }: { mode: NavMode }) {
         </nav>
 
         <div className="p-4 border-t border-white/20">
+          {me && (
+            <div className="mb-3 px-3 py-2 rounded-lg bg-white/10">
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 flex-shrink-0 text-white/60" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{me.full_name}</p>
+                  <p className="text-[11px] text-white/60 truncate">{me.email}</p>
+                </div>
+              </div>
+              <span className={cn(
+                'mt-1.5 inline-block text-[10px] px-1.5 py-0.5 rounded font-medium',
+                me.is_admin ? 'bg-amber-500 text-white' : 'bg-white/20 text-white/80'
+              )}>
+                {me.is_admin ? '管理者' : me.is_free_user ? '無料ユーザー' : me.is_online ? 'オンライン受講生' : '対面受講生'}
+              </span>
+            </div>
+          )}
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-colors w-full text-sm"
