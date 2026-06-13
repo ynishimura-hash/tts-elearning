@@ -16,7 +16,7 @@ type NavItem = {
   href: string
   label: string
   icon: React.ElementType
-  badgeKey?: 'peakBottomPending' | 'applicationsPending' | 'paymentsPending' | 'studySessionsUnanswered'
+  badgeKey?: 'peakBottomPending' | 'applicationsPending' | 'paymentsPending' | 'studySessionsUnanswered' | 'consultationsPending' | 'questionsPending'
 }
 
 const navItems: Record<NavMode, NavItem[]> = {
@@ -49,8 +49,8 @@ const navItems: Record<NavMode, NavItem[]> = {
     { href: '/admin/announcements', label: 'お知らせ管理', icon: Bell },
     { href: '/admin/study-sessions', label: '勉強会管理', icon: CalendarDays },
     { href: '/admin/peak-bottom', label: 'ピークボトム申請', icon: Wrench, badgeKey: 'peakBottomPending' },
-    { href: '/admin/questions', label: '質問管理', icon: MessageSquare },
-    { href: '/admin/consultations', label: '個別相談', icon: Users },
+    { href: '/admin/questions', label: '質問管理', icon: MessageSquare, badgeKey: 'questionsPending' },
+    { href: '/admin/consultations', label: '個別相談', icon: Users, badgeKey: 'consultationsPending' },
     { href: '/admin/blog', label: 'ブログ管理', icon: FileText },
     { href: '/admin/qa', label: 'Q&A管理', icon: HelpCircle },
     { href: '/admin/applications', label: '申込管理', icon: UserPlus, badgeKey: 'applicationsPending' },
@@ -68,6 +68,8 @@ type Badges = {
   applicationsPending: number
   paymentsPending: number
   studySessionsUnanswered: number
+  consultationsPending: number
+  questionsPending: number
 }
 
 export function Navigation({ mode }: { mode: NavMode }) {
@@ -78,6 +80,8 @@ export function Navigation({ mode }: { mode: NavMode }) {
     applicationsPending: 0,
     paymentsPending: 0,
     studySessionsUnanswered: 0,
+    consultationsPending: 0,
+    questionsPending: 0,
   })
   const items = navItems[mode]
   const [me, setMe] = useState<{
@@ -115,16 +119,22 @@ export function Navigation({ mode }: { mode: NavMode }) {
     let cancelled = false
 
     async function fetchBadges() {
-      const [pb, unpaid] = await Promise.all([
+      const [pb, unpaid, consult, ques] = await Promise.all([
         supabase.from('peak_bottom_applications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         // 入金未完了 = 申し込み済み or 入金待ち
         supabase.from('applications').select('id', { count: 'exact', head: true }).eq('payment_status', 'unpaid'),
+        // 個別相談の未対応
+        supabase.from('consultations').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+        // 質問の未対応
+        supabase.from('user_questions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
       ])
       if (cancelled) return
       setBadges(b => ({
         ...b,
         peakBottomPending: pb.count || 0,
         applicationsPending: unpaid.count || 0,
+        consultationsPending: consult.count || 0,
+        questionsPending: ques.count || 0,
       }))
     }
 
