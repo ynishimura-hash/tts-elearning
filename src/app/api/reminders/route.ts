@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
       .select('id, email, full_name, is_online')
       .eq('is_admin', false)
       .eq('is_free_user', false)
+      .eq('study_notify_enabled', true) // 通知オフの会員は対象外
       .eq('is_online', session.is_online)
 
     if (!allUsers) continue

@@ -43,6 +43,8 @@ export interface User {
   // - offline: オフライン公式LINE の userId（オフライン会員のみ。テスターは NULL）
   line_user_id_online?: string | null
   line_user_id_offline?: string | null
+  // 勉強会通知（出欠案内・催促・2週間前自動通知）を送るか。false で対象外。既定 true
+  study_notify_enabled?: boolean
 }
 
 export interface Course {

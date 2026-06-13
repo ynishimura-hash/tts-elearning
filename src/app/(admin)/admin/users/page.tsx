@@ -23,6 +23,7 @@ export default function AdminUsersPage() {
     curriculum: '', community_member: false, myrule_permitted: false,
     is_test: false, drive_folder_url: '',
     is_on_leave: false, withdrew_at: '',
+    study_notify_enabled: true,
   })
   const [saving, setSaving] = useState(false)
   const [pwInput, setPwInput] = useState('')
@@ -167,6 +168,7 @@ export default function AdminUsersPage() {
       drive_folder_url: user.drive_folder_url || '',
       is_on_leave: !!user.is_on_leave,
       withdrew_at: user.withdrew_at ? user.withdrew_at.split('T')[0] : '',
+      study_notify_enabled: user.study_notify_enabled !== false,
     })
     setSelectedUser(null)
     setPwInput('')
@@ -316,6 +318,7 @@ export default function AdminUsersPage() {
       drive_folder_url: editForm.drive_folder_url || null,
       is_on_leave: editForm.is_on_leave,
       withdrew_at: editForm.withdrew_at || null,
+      study_notify_enabled: editForm.study_notify_enabled,
     }).eq('id', editingUser.id)
 
     setSaving(false)
@@ -511,6 +514,7 @@ export default function AdminUsersPage() {
               <div><span className="text-gray-500">コミュニティ:</span> <span className="font-medium">{selectedUser.community_member ? '加入' : '未加入'}</span></div>
               <div><span className="text-gray-500">マイルール許可:</span> <span className="font-medium">{selectedUser.myrule_permitted ? 'あり' : 'なし'}</span></div>
               <div><span className="text-gray-500">休学:</span> <span className={`font-medium ${selectedUser.is_on_leave ? 'text-amber-700' : ''}`}>{selectedUser.is_on_leave ? '休学中' : '-'}</span></div>
+              <div><span className="text-gray-500">勉強会通知:</span> <span className={`font-medium ${selectedUser.study_notify_enabled === false ? 'text-rose-700' : ''}`}>{selectedUser.study_notify_enabled === false ? '対象外（オフ）' : '送る'}</span></div>
               <div><span className="text-gray-500">期限日:</span> <span className={`font-medium ${selectedUser.withdrew_at && new Date(selectedUser.withdrew_at) <= new Date() ? 'text-rose-700' : ''}`}>{selectedUser.withdrew_at ? formatDate(selectedUser.withdrew_at) : '-'}</span></div>
               <div className="col-span-2"><span className="text-gray-500">最終ログイン:</span> <span className="font-medium">{selectedUser.last_login_at ? formatDateTime(selectedUser.last_login_at) : '未ログイン'}</span></div>
               <div className="col-span-2"><span className="text-gray-500">最終学習コンテンツ:</span> <span className="font-medium">{selectedUser.last_content || '-'}</span></div>
@@ -831,6 +835,7 @@ export default function AdminUsersPage() {
                   { key: 'myrule_permitted', label: 'マイルール許可' },
                   { key: 'is_test', label: 'テストアカウント' },
                   { key: 'is_on_leave', label: '休学中' },
+                  { key: 'study_notify_enabled', label: '勉強会の通知を送る' },
                 ].map((opt) => (
                   <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700">
                     <input type="checkbox" checked={(editForm as Record<string, unknown>)[opt.key] as boolean}

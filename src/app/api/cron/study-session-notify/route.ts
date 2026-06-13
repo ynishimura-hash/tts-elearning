@@ -65,6 +65,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       .select('id, line_user_id_online, line_user_id_offline, full_name, is_online, is_tester')
       .eq('is_admin', false)
       .eq('is_test', false)
+      .eq('study_notify_enabled', true) // 通知オフの会員は対象外
 
     const { data: users } = session.is_online
       ? await usersQuery.eq('is_online', true)

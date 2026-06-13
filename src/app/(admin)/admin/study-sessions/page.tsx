@@ -6,7 +6,7 @@ import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin
 import { formatDate, formatDateWithWeekday, isPastSession } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance, User } from '@/types/database'
 
-type EligibleUser = Pick<User, 'id' | 'full_name' | 'email' | 'is_online' | 'is_admin' | 'is_test' | 'is_free_user' | 'is_tester'>
+type EligibleUser = Pick<User, 'id' | 'full_name' | 'email' | 'is_online' | 'is_admin' | 'is_test' | 'is_free_user' | 'is_tester' | 'study_notify_enabled'>
 
 export default function AdminStudySessionsPage() {
   const [sessions, setSessions] = useState<StudySession[]>([])
@@ -34,7 +34,7 @@ export default function AdminStudySessionsPage() {
     const { data: allAttendance } = await supabase
       .from('study_session_attendance').select('*')
     const { data: allUsers } = await supabase
-      .from('users').select('id, full_name, email, is_online, is_admin, is_test, is_free_user, is_tester')
+      .from('users').select('id, full_name, email, is_online, is_admin, is_test, is_free_user, is_tester, study_notify_enabled')
 
     if (allAttendance && allUsers) {
       setUsers(allUsers as EligibleUser[])
@@ -56,6 +56,7 @@ export default function AdminStudySessionsPage() {
       if (u.is_admin) return false
       if (u.is_test) return false
       if (u.is_free_user) return false
+      if (u.study_notify_enabled === false) return false // 通知オフは対象外（カウントから除外）
       // オンライン勉強会 → オンライン受講生
       // 対面勉強会 → 対面受講生（テスターは任意参加なので未回答対象に含めない）
       return session.is_online ? u.is_online : !u.is_online
