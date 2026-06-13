@@ -305,6 +305,17 @@ function LineLinkForm({ params }: PageProps) {
                       </>
                     )}
                   </button>
+
+                  <div className="text-center pt-1">
+                    <a
+                      href="/forgot-password"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-slate-500 hover:text-slate-700 underline"
+                    >
+                      パスワードをお忘れの方
+                    </a>
+                  </div>
                 </form>
               )}
             </>

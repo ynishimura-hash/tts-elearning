@@ -154,6 +154,33 @@ async function sendViaResend(args: SendArgs & { apiKey: string }): Promise<SendR
   return { success: true }
 }
 
+/**
+ * 単発のトランザクションメールを送る（パスワード再設定など）。
+ * 一斉配信と違い、配信停止リストの対象外（取引上必須のメールのため）。
+ * 送信経路は sendBroadcast と同じ優先順（Gmail SMTP → Resend → モック）。
+ */
+export async function sendTransactionalEmail(args: {
+  to: string
+  subject: string
+  html: string
+  senderName?: string
+  senderEmail?: string
+}): Promise<SendResult> {
+  const senderName = args.senderName || TTS_SENDER.name
+  const senderEmail = args.senderEmail || TTS_SENDER.email
+  const from = `"${senderName}" <${senderEmail}>`
+  const sendArgs: SendArgs = { from, to: args.to, subject: args.subject, html: args.html }
+
+  if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+    return sendViaGmail(sendArgs)
+  }
+  if (process.env.RESEND_API_KEY) {
+    return sendViaResend({ ...sendArgs, apiKey: process.env.RESEND_API_KEY })
+  }
+  console.log(`[transactional mock] ${from} -> ${args.to}: ${args.subject}`)
+  return { success: true }
+}
+
 interface SendBroadcastArgs {
   recipients: RecipientVariables[]
   subject: string
