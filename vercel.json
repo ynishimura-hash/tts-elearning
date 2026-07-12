@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/study-session-notify",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/progress-remind",
+      "schedule": "0 1 * * *"
     }
   ]
 }

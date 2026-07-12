@@ -43,7 +43,15 @@ function resolveRecipient(
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const supabase = getSupabase()
-    const { sessionId, type } = await request.json()
+    const body = (await request.json()) as {
+      sessionId: string
+      type: 'request' | 'reminder'
+      /** 明示指定時はこの会員IDのみに送信（管理画面プレビューで選んだ対象者） */
+      userIds?: string[]
+      /** 出欠案内の本文差し替え（出欠回答リンクは各自宛に自動付与する） */
+      messageBody?: string
+    }
+    const { sessionId, type, userIds, messageBody } = body
 
     // 勉強会情報取得
     const { data: session } = await supabase
@@ -79,6 +87,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     })
 
     let targetUsers: UserRow[] = users as UserRow[]
+    // 管理画面のプレビューで選択された対象者に限定（指定があれば）
+    if (Array.isArray(userIds) && userIds.length > 0) {
+      const idSet = new Set(userIds)
+      targetUsers = targetUsers.filter((u) => idSet.has(u.id))
+    }
+    // 本文差し替え（空文字は無視してデフォルト文面を使う）
+    const bodyOverride =
+      typeof messageBody === 'string' && messageBody.trim().length > 0 ? messageBody.trim() : null
     let sentCount = 0
 
     if (type === 'reminder') {
@@ -122,14 +138,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     } else {
       // 出欠案内（全員に送信）
       for (const user of targetUsers) {
-        // 出欠レコードを作成（未回答状態）
+        // 出欠レコードを作成（未回答状態）。
+        // ignoreDuplicates: 既にレコードがある人（回答済み含む）は上書きしない＝回答を壊さない
         await supabase
           .from('study_session_attendance')
           .upsert({
             session_id: sessionId,
             user_id: user.id,
             status: 'pending',
-          }, { onConflict: 'session_id,user_id' })
+          }, { onConflict: 'session_id,user_id', ignoreDuplicates: true })
 
         const { lineUserId, channel } = resolveRecipient(user, session.is_online)
         let sent = false
@@ -140,7 +157,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             : (session.location ? `\n場所: ${session.location}` : '')
 
           const attendUrl = `https://tts-e.vercel.app${user.is_online ? '/online/study-sessions' : '/study-sessions'}`
-          const message = `【勉強会のご案内】\n\n${session.title}\n日時: ${sessionDate}\n時間: ${session.session_time || '未定'}${locationInfo}\n\n出欠のご回答をお願いいたします。\n\n▼ 出欠の回答はこちら\n${attendUrl}`
+          const message = bodyOverride
+            ? `${bodyOverride}\n\n▼ 出欠の回答はこちら\n${attendUrl}`
+            : `【勉強会のご案内】\n\n${session.title}\n日時: ${sessionDate}\n時間: ${session.session_time || '未定'}${locationInfo}\n\n出欠のご回答をお願いいたします。\n\n▼ 出欠の回答はこちら\n${attendUrl}`
           sent = await pushLineMessage(lineUserId, message, channel)
           if (sent) sentCount++
         }

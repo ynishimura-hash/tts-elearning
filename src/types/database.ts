@@ -46,6 +46,18 @@ export interface User {
   line_user_id_offline?: string | null
   // 勉強会通知（出欠案内・催促・2週間前自動通知）を送るか。false で対象外。既定 true
   study_notify_enabled?: boolean
+  // 進捗報告の自動催促（LINE）を最後に送った日時。cron の重複送信防止用
+  progress_reminded_at?: string | null
+}
+
+// 進捗報告（受講生の自己申告。提出後は編集不可）
+export interface ProgressReport {
+  id: string
+  user_id: string
+  current_topic: string | null
+  content: string
+  reported_at: string
+  created_at: string
 }
 
 export interface Course {

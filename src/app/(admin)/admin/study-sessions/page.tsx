@@ -6,6 +6,10 @@ import { createClient } from '@/lib/supabase/client'
 import { CalendarDays, Plus, Trash2, CheckCircle2, XCircle, Clock, Video, MapPin, Edit, Save, X, Send, Bell, Copy, Zap, ChevronDown, ChevronUp } from 'lucide-react'
 import { formatDate, formatDateWithWeekday, isPastSession } from '@/lib/utils'
 import type { StudySession, StudySessionAttendance, User } from '@/types/database'
+import {
+  DEFAULT_DIGEST_INTRO, DEFAULT_DIGEST_CLOSING, buildDigestMessage,
+  type DigestStatus, type DigestSessionLine,
+} from '@/lib/session-digest'
 
 type EligibleUser = Pick<User, 'id' | 'full_name' | 'email' | 'is_online' | 'is_admin' | 'is_test' | 'is_free_user' | 'is_tester' | 'is_verifier' | 'study_notify_enabled'>
 
@@ -19,23 +23,17 @@ const STAGE_LABEL: Record<string, string> = {
   attend_1day: '1日前 リマインド',
 }
 
-// 自動送信の段階（cron と一致）。手動催促時のスキップ選択に使う
-const AUTO_STAGES: { flag: 'notify_1month_at' | 'two_week_notify_sent_at' | 'remind_1week_at' | 'remind_1day_at'; offsetDays: number; label: string }[] = [
-  { flag: 'notify_1month_at', offsetDays: 30, label: '1ヶ月前 催促' },
-  { flag: 'two_week_notify_sent_at', offsetDays: 14, label: '2週間前 催促' },
-  { flag: 'remind_1week_at', offsetDays: 7, label: '1週間前 リマインド' },
-  { flag: 'remind_1day_at', offsetDays: 1, label: '1日前 リマインド' },
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// リマインドスケジュールの4段階（cron と一致）。
+// オン/オフは notify_skip 配列で表現する（flag を含む=OFF、含まない=ON）。
+type ScheduleFlag = 'notify_1month_at' | 'two_week_notify_sent_at' | 'remind_1week_at' | 'remind_1day_at'
+const SCHEDULE_STAGES: { flag: ScheduleFlag; offsetDays: number; label: string }[] = [
+  { flag: 'notify_1month_at', offsetDays: 30, label: '1ヶ月前 催促（未回答者へ）' },
+  { flag: 'two_week_notify_sent_at', offsetDays: 14, label: '2週間前 催促（未回答者へ）' },
+  { flag: 'remind_1week_at', offsetDays: 7, label: '1週間前 リマインド（出席者へ）' },
+  { flag: 'remind_1day_at', offsetDays: 1, label: '1日前 リマインド（出席者へ）' },
 ]
-function upcomingAutoStages(session: StudySession) {
-  const now = new Date()
-  const sd = new Date(session.session_date).getTime()
-  return AUTO_STAGES.map((s) => {
-    const stageDate = new Date(sd - s.offsetDays * 24 * 60 * 60 * 1000)
-    const sent = !!session[s.flag]
-    const skipped = session.notify_skip?.includes(s.flag) ?? false
-    return { ...s, stageDate, willSend: !sent && !skipped && stageDate > now }
-  })
-}
 
 type AttendanceStatus = 'attending' | 'absent' | 'undecided' | 'pending'
 type RosterRow = {
@@ -274,21 +272,53 @@ export default function AdminStudySessionsPage() {
   }
 
   const [sendingSession, setSendingSession] = useState<string | null>(null)
-  const [reminderModal, setReminderModal] = useState<StudySession | null>(null)
-  const [skipChoices, setSkipChoices] = useState<Set<string>>(new Set())
+  // 出欠案内プレビュー用
+  const [attendanceModal, setAttendanceModal] = useState<StudySession | null>(null)
+  const [recipientChecks, setRecipientChecks] = useState<Record<string, boolean>>({})
+  const [attendanceBody, setAttendanceBody] = useState('')
+  // まとめ案内用
+  const [digestOpen, setDigestOpen] = useState(false)
+  const [digestIntro, setDigestIntro] = useState('')
+  const [digestClosing, setDigestClosing] = useState('')
+  const [digestChecks, setDigestChecks] = useState<Record<string, boolean>>({})
+  const [digestSending, setDigestSending] = useState(false)
 
-  async function sendAttendanceRequest(sessionId: string) {
-    if (!confirm('出欠案内をLINEで送信しますか？')) return
-    setSendingSession(sessionId)
+  /** 出欠案内の初期文面（本文のみ。出欠回答リンクは送信時に各自宛へ自動付与される） */
+  function buildDefaultAttendanceBody(session: StudySession): string {
+    const dateStr = new Date(session.session_date).toLocaleDateString('ja-JP', {
+      year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
+    })
+    const loc = session.is_online ? '\nZoomにて開催' : (session.location ? `\n場所: ${session.location}` : '')
+    return `【勉強会のご案内】\n\n${session.title}\n日時: ${dateStr}\n時間: ${session.session_time || '未定'}${loc}\n\n出欠のご回答をお願いいたします。`
+  }
+
+  /** 出欠案内プレビューを開く（未回答者のみを初期選択） */
+  function openAttendanceModal(session: StudySession) {
+    const unanswered = getRoster(session).filter((r) => !r.notifyOff && r.status === 'pending')
+    const checks: Record<string, boolean> = {}
+    unanswered.forEach((r) => { checks[r.user.id] = true })
+    setRecipientChecks(checks)
+    setAttendanceBody(buildDefaultAttendanceBody(session))
+    setAttendanceModal(session)
+  }
+
+  async function sendAttendanceRequest() {
+    const session = attendanceModal
+    if (!session) return
+    const selectedIds = Object.entries(recipientChecks).filter(([, v]) => v).map(([id]) => id)
+    if (selectedIds.length === 0) { alert('送信対象が選択されていません'); return }
+    if (!confirm(`${selectedIds.length}人に出欠案内をLINEで送信しますか？`)) return
+    setSendingSession(session.id)
     try {
       const res = await fetch('/api/line/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, type: 'request' }),
+        body: JSON.stringify({ sessionId: session.id, type: 'request', userIds: selectedIds, messageBody: attendanceBody }),
       })
       const data = await res.json()
       if (data.success) {
         alert(`出欠案内を${data.sentCount || 0}人に送信しました`)
+        setAttendanceModal(null)
         fetchData()
       } else {
         alert(data.message || '送信に失敗しました')
@@ -299,21 +329,10 @@ export default function AdminStudySessionsPage() {
     setSendingSession(null)
   }
 
-  function openReminderModal(session: StudySession) {
-    setSkipChoices(new Set())
-    setReminderModal(session)
-  }
-
-  async function confirmReminder() {
-    const session = reminderModal
-    if (!session) return
+  async function sendReminder(session: StudySession) {
+    if (!confirm(`「${session.title}」の未回答者に催促をLINEで送信しますか？`)) return
     setSendingSession(session.id)
     try {
-      // チェックされた段階を自動送信スキップに追加
-      if (skipChoices.size > 0) {
-        const merged = Array.from(new Set([...(session.notify_skip ?? []), ...skipChoices]))
-        await createClient().from('study_sessions').update({ notify_skip: merged }).eq('id', session.id)
-      }
       const res = await fetch('/api/line/attendance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -321,8 +340,7 @@ export default function AdminStudySessionsPage() {
       })
       const data = await res.json()
       if (data.success) {
-        const skipNote = skipChoices.size > 0 ? `\n（${skipChoices.size}件の自動催促を停止しました）` : ''
-        alert(`催促を${data.sentCount || 0}人に送信しました${skipNote}`)
+        alert(`催促を${data.sentCount || 0}人に送信しました`)
       } else {
         alert(data.message || '送信に失敗しました')
       }
@@ -330,25 +348,86 @@ export default function AdminStudySessionsPage() {
       alert('送信に失敗しました')
     }
     setSendingSession(null)
-    setReminderModal(null)
     fetchData()
   }
 
-  async function triggerReminders() {
-    try {
-      await fetch('/api/reminders', { method: 'POST' })
-      alert('リマインダーを送信しました')
-    } catch {
-      alert('リマインダー送信に失敗しました')
-    }
+  // ===== まとめ案内 =====
+  const DIGEST_STATUS_JP: Record<string, DigestStatus> = { attending: '出席', absent: '欠席', undecided: '未定', pending: '未回答' }
+
+  /** 受講生 u がその勉強会の対象か（オンライン勉強会=オンライン / 対面=対面+テスター） */
+  function userEligibleForSession(u: EligibleUser, session: StudySession): boolean {
+    return session.is_online ? u.is_online : (!u.is_online || u.is_tester === true)
   }
 
-  async function toggleAutoNotify(sessionId: string, current: boolean) {
-    const supabase = createClient()
-    const { error } = await supabase
+  /** まとめ案内の対象になりうる受講生（今後の勉強会に1件でも参加可能） */
+  function digestRecipientsList(): EligibleUser[] {
+    const future = sessions.filter((s) => !isPastSession(s.session_date))
+    return users.filter((u) =>
+      !u.is_admin && !u.is_test && !u.is_free_user && !u.is_verifier &&
+      u.study_notify_enabled !== false &&
+      future.some((s) => userEligibleForSession(u, s))
+    )
+  }
+
+  /** 受講生 u の今後の勉強会 + 出欠状況 */
+  function futureSessionsForUser(u: EligibleUser): DigestSessionLine[] {
+    return sessions
+      .filter((s) => !isPastSession(s.session_date) && userEligibleForSession(u, s))
+      .sort((a, b) => a.session_date.localeCompare(b.session_date))
+      .map((s) => {
+        const rec = (attendanceMap[s.id] || []).find((a) => a.user_id === u.id)
+        return {
+          dateLabel: new Date(s.session_date).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' }),
+          time: s.session_time,
+          isOnline: s.is_online,
+          status: DIGEST_STATUS_JP[(rec?.status as string) ?? 'pending'] ?? '未回答',
+        }
+      })
+  }
+
+  function openDigestModal() {
+    const recips = digestRecipientsList()
+    const checks: Record<string, boolean> = {}
+    recips.forEach((u) => { checks[u.id] = true })
+    setDigestChecks(checks)
+    setDigestIntro(DEFAULT_DIGEST_INTRO)
+    setDigestClosing(DEFAULT_DIGEST_CLOSING)
+    setDigestOpen(true)
+  }
+
+  async function sendDigest() {
+    const selectedIds = Object.entries(digestChecks).filter(([, v]) => v).map(([id]) => id)
+    if (selectedIds.length === 0) { alert('送信対象が選択されていません'); return }
+    if (!confirm(`${selectedIds.length}人にまとめ案内をLINEで送信しますか？`)) return
+    setDigestSending(true)
+    try {
+      const res = await fetch('/api/line/session-digest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ intro: digestIntro, closing: digestClosing, userIds: selectedIds }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        alert(`まとめ案内を${data.sentCount || 0}人に送信しました（対象${data.targetCount || 0}人）。実際の着信もご確認ください。`)
+        setDigestOpen(false)
+      } else {
+        alert(data.message || '送信に失敗しました')
+      }
+    } catch {
+      alert('送信に失敗しました')
+    }
+    setDigestSending(false)
+  }
+
+  /** リマインド段階のオン/オフを切り替える（notify_skip 配列で管理） */
+  async function toggleStageSkip(session: StudySession, flag: ScheduleFlag) {
+    const skip = new Set(session.notify_skip ?? [])
+    if (skip.has(flag)) skip.delete(flag)
+    else skip.add(flag)
+    const { error } = await createClient()
       .from('study_sessions')
-      .update({ auto_notify_enabled: !current })
-      .eq('id', sessionId)
+      .update({ notify_skip: Array.from(skip) })
+      .eq('id', session.id)
     if (error) {
       alert('更新に失敗しました: ' + error.message)
       return
@@ -374,9 +453,10 @@ export default function AdminStudySessionsPage() {
             className="flex items-center gap-2 px-4 py-2 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-sm font-medium hover:bg-rose-100 transition-colors">
             <Bell className="w-4 h-4" /> 未回答ダッシュボード
           </Link>
-          <button onClick={triggerReminders}
-            className="px-4 py-2 bg-[#e39f3c] text-white rounded-lg text-sm font-medium hover:bg-[#d08f30] transition-colors">
-            リマインド送信
+          <button onClick={openDigestModal}
+            className="flex items-center gap-2 px-4 py-2 bg-[#e39f3c] text-white rounded-lg text-sm font-medium hover:bg-[#d08f30] transition-colors"
+            title="今後の勉強会と各自の出欠状況をまとめてLINEで案内">
+            <Send className="w-4 h-4" /> まとめ案内
           </button>
           <button onClick={startNew}
             className="flex items-center gap-2 px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75] transition-colors">
@@ -508,15 +588,15 @@ export default function AdminStudySessionsPage() {
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {!isPast && (
                       <>
-                        <button onClick={() => sendAttendanceRequest(session.id)}
+                        <button onClick={() => openAttendanceModal(session)}
                           disabled={sendingSession === session.id}
                           className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
-                          title="出欠案内をLINEで送信">
+                          title="出欠案内をLINEで送信（対象者・文面を確認してから送信）">
                           <Send className="w-3.5 h-3.5" />
                           {sendingSession === session.id ? '送信中...' : '出欠案内'}
                         </button>
                         {pendingCount > 0 && (
-                          <button onClick={() => openReminderModal(session)}
+                          <button onClick={() => sendReminder(session)}
                             disabled={sendingSession === session.id}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 transition-colors disabled:opacity-50"
                             title="未回答者に催促">
@@ -573,29 +653,47 @@ export default function AdminStudySessionsPage() {
                   </div>
                 </div>
 
-                {/* 2週間前自動配信トグル */}
+                {/* リマインドスケジュール（自動送信の段階オンオフ） */}
                 {!isPast && (
-                  <div className="mt-3 flex items-center justify-between bg-blue-50 border border-blue-100 rounded-lg px-4 py-2">
-                    <div className="flex items-center gap-2">
+                  <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-3">
+                    <div className="flex items-center gap-2 mb-2">
                       <Zap className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm font-medium text-gray-700">2週間前にLINEで自動配信</span>
-                      {session.two_week_notify_sent_at && (
-                        <span className="text-xs text-blue-700">（{formatDate(session.two_week_notify_sent_at)} に配信済み）</span>
-                      )}
+                      <span className="text-sm font-medium text-gray-700">リマインドスケジュール（自動送信）</span>
                     </div>
-                    <button
-                      onClick={() => toggleAutoNotify(session.id, session.auto_notify_enabled)}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        session.auto_notify_enabled ? 'bg-[#384a8f]' : 'bg-gray-300'
-                      }`}
-                      role="switch"
-                      aria-checked={session.auto_notify_enabled}
-                      title={session.auto_notify_enabled ? 'OFFにする' : 'ONにする'}
-                    >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        session.auto_notify_enabled ? 'translate-x-6' : 'translate-x-1'
-                      }`} />
-                    </button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {SCHEDULE_STAGES.map((st) => {
+                        const on = !(session.notify_skip ?? []).includes(st.flag)
+                        const sentAt = session[st.flag] as string | null | undefined
+                        const stageDate = new Date(new Date(session.session_date).getTime() - st.offsetDays * DAY_MS)
+                        const isStagePast = stageDate.getTime() < Date.now()
+                        return (
+                          <label key={st.flag}
+                            className={`flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm ${sentAt ? 'opacity-70' : 'cursor-pointer'}`}>
+                            <input type="checkbox" checked={on} disabled={!!sentAt}
+                              onChange={() => toggleStageSkip(session, st.flag)}
+                              className="rounded border-gray-300 text-[#384a8f] focus:ring-[#384a8f] disabled:opacity-50" />
+                            <span className="flex-1 text-gray-700">
+                              {st.label}
+                              <span className="ml-1 text-xs text-gray-400">
+                                {stageDate.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}頃
+                              </span>
+                            </span>
+                            {sentAt ? (
+                              <span className="text-xs text-blue-700 flex-shrink-0">配信済み</span>
+                            ) : !on ? (
+                              <span className="text-xs text-gray-400 flex-shrink-0">OFF</span>
+                            ) : isStagePast ? (
+                              <span className="text-xs text-amber-600 flex-shrink-0">期限切れ</span>
+                            ) : (
+                              <span className="text-xs text-emerald-600 flex-shrink-0">予定</span>
+                            )}
+                          </label>
+                        )
+                      })}
+                    </div>
+                    <p className="mt-2 text-xs text-gray-400">
+                      チェックを外すとその自動送信を止めます。配信済みの段階は変更できません。
+                    </p>
                   </div>
                 )}
 
@@ -701,47 +799,145 @@ export default function AdminStudySessionsPage() {
         )}
       </div>
 
-      {/* 手動催促モーダル（今後の自動催促をスキップ選択） */}
-      {reminderModal && (() => {
-        const upcoming = upcomingAutoStages(reminderModal).filter((s) => s.willSend)
+      {/* 出欠案内 プレビュー＆編集モーダル */}
+      {attendanceModal && (() => {
+        const session = attendanceModal
+        const roster = getRoster(session).filter((r) => !r.notifyOff && r.status === 'pending')
+        const selectedCount = Object.values(recipientChecks).filter(Boolean).length
         return (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setReminderModal(null)}>
-            <div className="bg-white rounded-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-              <h2 className="text-lg font-bold text-gray-800 mb-1">未回答者に催促</h2>
-              <p className="text-sm text-gray-500 mb-4">{reminderModal.title}</p>
-              {upcoming.length > 0 ? (
-                <>
-                  <p className="text-xs text-gray-600 mb-2">
-                    この勉強会の今後の自動催促です。<strong>止めたい段階にチェック</strong>してください（チェックすると自動送信しません）。
-                  </p>
-                  <div className="space-y-2 mb-4">
-                    {upcoming.map((s) => (
-                      <label key={s.flag} className="flex items-center gap-2 text-sm bg-gray-50 rounded-lg px-3 py-2 cursor-pointer">
-                        <input type="checkbox" checked={skipChoices.has(s.flag)}
-                          onChange={(e) => setSkipChoices((prev) => {
-                            const n = new Set(prev)
-                            if (e.target.checked) n.add(s.flag)
-                            else n.delete(s.flag)
-                            return n
-                          })}
-                          className="rounded border-gray-300 text-[#384a8f] focus:ring-[#384a8f]" />
-                        <span className="flex-1">{s.label}</span>
-                        <span className="text-xs text-gray-400">
-                          {s.stageDate.toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}頃
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </>
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setAttendanceModal(null)}>
+            <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-lg font-bold text-gray-800">出欠案内の送信</h2>
+                <button onClick={() => setAttendanceModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">{session.title}</p>
+
+              {/* 文面 */}
+              <label className="block text-sm font-medium text-gray-700 mb-1">文面（本文）</label>
+              <textarea rows={7} value={attendanceBody} onChange={(e) => setAttendanceBody(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm resize-y focus:ring-2 focus:ring-[#384a8f] outline-none" />
+              <p className="text-xs text-gray-400 mt-1 mb-4">
+                ※ 送信時、各自の「出欠回答リンク」が本文の末尾に自動で追加されます。
+              </p>
+
+              {/* 対象者 */}
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">送信対象（未回答者）</span>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="text-gray-500">{selectedCount} / {roster.length} 名</span>
+                  <button type="button" onClick={() => setRecipientChecks(Object.fromEntries(roster.map((r) => [r.user.id, true])))}
+                    className="text-[#384a8f] hover:underline">全選択</button>
+                  <button type="button" onClick={() => setRecipientChecks(Object.fromEntries(roster.map((r) => [r.user.id, false])))}
+                    className="text-gray-500 hover:underline">全解除</button>
+                </div>
+              </div>
+              {roster.length === 0 ? (
+                <p className="text-sm text-gray-400 py-3">未回答の方はいません。（回答済みの方には案内は送られません）</p>
               ) : (
-                <p className="text-sm text-gray-500 mb-4">この勉強会に今後の自動催促はありません。</p>
+                <div className="border rounded-lg divide-y max-h-56 overflow-y-auto mb-4">
+                  {roster.map((r) => (
+                    <label key={r.user.id} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
+                      <input type="checkbox" checked={!!recipientChecks[r.user.id]}
+                        onChange={(e) => setRecipientChecks((prev) => ({ ...prev, [r.user.id]: e.target.checked }))}
+                        className="rounded border-gray-300 text-[#384a8f] focus:ring-[#384a8f]" />
+                      <span className="flex-1 text-gray-800">{r.user.full_name}</span>
+                      {r.user.is_tester && <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-600">テスター</span>}
+                    </label>
+                  ))}
+                </div>
               )}
+
               <div className="flex gap-2 justify-end">
-                <button onClick={() => setReminderModal(null)}
-                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">閉じる</button>
-                <button onClick={confirmReminder} disabled={sendingSession === reminderModal.id}
-                  className="px-4 py-2 bg-[#384a8f] text-white rounded-lg text-sm font-medium hover:bg-[#2d3d75] disabled:opacity-50">
-                  {sendingSession === reminderModal.id ? '送信中...' : '催促を送信'}
+                <button onClick={() => setAttendanceModal(null)}
+                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">キャンセル</button>
+                <button onClick={sendAttendanceRequest} disabled={sendingSession === session.id || selectedCount === 0}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+                  <Send className="w-4 h-4" />
+                  {sendingSession === session.id ? '送信中...' : `${selectedCount}人に送信`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* まとめ案内モーダル */}
+      {digestOpen && (() => {
+        const recips = digestRecipientsList()
+        const selectedCount = Object.values(digestChecks).filter(Boolean).length
+        const firstChecked = recips.find((u) => digestChecks[u.id])
+        const preview = firstChecked
+          ? buildDigestMessage(digestIntro, digestClosing, futureSessionsForUser(firstChecked),
+              `https://tts-e.vercel.app${firstChecked.is_online ? '/online/study-sessions' : '/study-sessions'}`)
+          : ''
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDigestOpen(false)}>
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-1">
+                <h2 className="text-lg font-bold text-gray-800">まとめ案内の送信</h2>
+                <button onClick={() => setDigestOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-500" /></button>
+              </div>
+              <p className="text-sm text-gray-500 mb-4">今後の勉強会と各自の出欠状況をまとめてLINEで案内します。</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">冒頭あいさつ</label>
+                  <textarea rows={6} value={digestIntro} onChange={(e) => setDigestIntro(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm resize-y focus:ring-2 focus:ring-[#384a8f] outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">結び</label>
+                  <textarea rows={6} value={digestClosing} onChange={(e) => setDigestClosing(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm resize-y focus:ring-2 focus:ring-[#384a8f] outline-none" />
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mb-4">※ 各自の「今後の勉強会＋出欠状況」と出欠回答リンクは自動で挿入されます。</p>
+
+              {preview && (
+                <div className="mb-4">
+                  <p className="text-xs font-medium text-gray-600 mb-1">プレビュー（{firstChecked?.full_name} さん宛の例）</p>
+                  <pre className="text-xs bg-gray-50 border rounded-lg p-3 whitespace-pre-wrap font-sans text-gray-700 max-h-48 overflow-y-auto">{preview}</pre>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">送信対象</span>
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="text-gray-500">{selectedCount} / {recips.length} 名</span>
+                  <button type="button" onClick={() => setDigestChecks(Object.fromEntries(recips.map((u) => [u.id, true])))} className="text-[#384a8f] hover:underline">全選択</button>
+                  <button type="button" onClick={() => setDigestChecks(Object.fromEntries(recips.map((u) => [u.id, false])))} className="text-gray-500 hover:underline">全解除</button>
+                </div>
+              </div>
+              {recips.length === 0 ? (
+                <p className="text-sm text-gray-400 py-3">今後の勉強会に参加可能な受講生がいません。</p>
+              ) : (
+                <div className="border rounded-lg divide-y max-h-56 overflow-y-auto mb-4">
+                  {recips.map((u) => {
+                    const lines = futureSessionsForUser(u)
+                    const unanswered = lines.filter((l) => l.status === '未回答').length
+                    return (
+                      <label key={u.id} className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" checked={!!digestChecks[u.id]}
+                          onChange={(e) => setDigestChecks((prev) => ({ ...prev, [u.id]: e.target.checked }))}
+                          className="rounded border-gray-300 text-[#384a8f] focus:ring-[#384a8f]" />
+                        <span className="flex-1 text-gray-800">{u.full_name}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded ${u.is_online ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-700'}`}>{u.is_online ? 'オンライン' : '対面'}</span>
+                        {u.is_tester && <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-600">テスター</span>}
+                        <span className="text-xs text-gray-400">{lines.length}件{unanswered > 0 ? `・未回答${unanswered}` : ''}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setDigestOpen(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">キャンセル</button>
+                <button onClick={sendDigest} disabled={digestSending || selectedCount === 0}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-[#e39f3c] text-white rounded-lg text-sm font-medium hover:bg-[#d08f30] disabled:opacity-50">
+                  <Send className="w-4 h-4" />{digestSending ? '送信中...' : `${selectedCount}人に送信`}
                 </button>
               </div>
             </div>

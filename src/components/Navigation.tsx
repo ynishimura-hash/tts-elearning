@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import {
   Home, BookOpen, Wrench, HelpCircle, MessageSquare, User, TrendingUp,
-  Menu, X, LogOut, Users, CalendarDays, Bell, FileText, UserPlus, Mail, MessageCircle, Wallet
+  Menu, X, LogOut, Users, CalendarDays, Bell, FileText, UserPlus, Mail, MessageCircle, Wallet, ClipboardList
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -24,6 +24,7 @@ const navItems: Record<NavMode, NavItem[]> = {
     { href: '/home', label: 'ホーム', icon: Home },
     { href: '/courses', label: 'コース一覧', icon: BookOpen },
     { href: '/study-sessions', label: '勉強会', icon: CalendarDays, badgeKey: 'studySessionsUnanswered' },
+    { href: '/progress-report', label: '進捗報告', icon: ClipboardList },
     { href: '/tools', label: '検証ツール', icon: Wrench },
     { href: '/questions', label: '質問受付', icon: MessageSquare },
     { href: '/consultation', label: '個別相談', icon: Users },
@@ -35,6 +36,7 @@ const navItems: Record<NavMode, NavItem[]> = {
     { href: '/online/home', label: 'ホーム', icon: Home },
     { href: '/online/courses', label: 'コース一覧', icon: BookOpen },
     { href: '/online/study-sessions', label: '勉強会', icon: CalendarDays, badgeKey: 'studySessionsUnanswered' },
+    { href: '/online/progress-report', label: '進捗報告', icon: ClipboardList },
     { href: '/online/tools', label: '検証ツール', icon: Wrench },
     { href: '/online/questions', label: '質問受付', icon: MessageSquare },
     { href: '/online/consultation', label: '個別相談', icon: Users },
@@ -48,6 +50,7 @@ const navItems: Record<NavMode, NavItem[]> = {
     { href: '/admin/courses', label: 'コース管理', icon: BookOpen },
     { href: '/admin/announcements', label: 'お知らせ管理', icon: Bell },
     { href: '/admin/study-sessions', label: '勉強会管理', icon: CalendarDays },
+    { href: '/admin/progress-reports', label: '進捗報告管理', icon: ClipboardList },
     { href: '/admin/peak-bottom', label: 'ピークボトム申請', icon: Wrench, badgeKey: 'peakBottomPending' },
     { href: '/admin/questions', label: '質問管理', icon: MessageSquare, badgeKey: 'questionsPending' },
     { href: '/admin/consultations', label: '個別相談', icon: Users, badgeKey: 'consultationsPending' },

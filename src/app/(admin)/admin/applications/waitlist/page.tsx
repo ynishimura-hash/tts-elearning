@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { createClient } from '@/lib/supabase/client'
 import {
   ArrowLeft, Search, Send, CheckCircle2, Clock, XCircle, Mail, Phone, MapPin,
   CalendarDays, Trash2, Hourglass,
@@ -28,13 +27,12 @@ export default function AdminWaitlistPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [sending, setSending] = useState(false)
 
-  async function fetchData() {
-    const supabase = createClient()
-    const { data } = await supabase
-      .from('waitlist_applications')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (data) setRows(data as WaitlistApplication[])
+  // RLS に依存せず service role のサーバーAPIで取得（招待前の行も確実に表示）
+  function fetchData() {
+    fetch('/api/admin/waitlist')
+      .then((r) => r.json())
+      .then((res) => { if (res?.success) setRows(res.rows as WaitlistApplication[]) })
+      .catch(() => { /* 失敗時は現状維持 */ })
   }
 
   useEffect(() => { fetchData() }, [])
@@ -74,13 +72,13 @@ export default function AdminWaitlistPage() {
 
   async function cancelRow(row: WaitlistApplication) {
     if (!confirm(`${row.full_name} さんの空き待ち登録を無効化します。よろしいですか？`)) return
-    const supabase = createClient()
-    const { error } = await supabase
-      .from('waitlist_applications')
-      .update({ status: 'cancelled' })
-      .eq('id', row.id)
-    if (error) {
-      toast.error(error.message)
+    const res = await fetch('/api/admin/waitlist', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: row.id, status: 'cancelled' }),
+    }).then((r) => r.json()).catch(() => null)
+    if (!res?.success) {
+      toast.error(res?.message || '無効化に失敗しました')
       return
     }
     toast.success('無効化しました')

@@ -462,6 +462,9 @@ export default function AdminUsersPage() {
                         }`}>
                           {user.is_admin ? '管理者' : user.is_free_user ? '無料' : user.is_online ? 'オンライン' : '対面'}
                         </span>
+                        {user.is_tester && (
+                          <span className="text-xs px-2 py-0.5 rounded w-fit bg-indigo-100 text-indigo-700 border border-indigo-300">テスター</span>
+                        )}
                         {user.is_test && (
                           <span className="text-xs px-2 py-0.5 rounded w-fit bg-yellow-100 text-yellow-700 border border-yellow-300">テスト</span>
                         )}
@@ -528,7 +531,7 @@ export default function AdminUsersPage() {
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div><span className="text-gray-500">メール:</span> <span className="font-medium">{selectedUser.email}</span></div>
               <div><span className="text-gray-500">顧客ID:</span> <span className="font-medium">{selectedUser.customer_id || '-'}</span></div>
-              <div><span className="text-gray-500">種別:</span> <span className="font-medium">{selectedUser.is_admin ? '管理者' : selectedUser.is_free_user ? '無料' : selectedUser.is_online ? 'オンライン' : '対面'}</span></div>
+              <div><span className="text-gray-500">種別:</span> <span className="font-medium">{selectedUser.is_admin ? '管理者' : selectedUser.is_free_user ? '無料' : selectedUser.is_online ? 'オンライン' : '対面'}{selectedUser.is_tester ? '（テスター）' : ''}</span></div>
               <div><span className="text-gray-500">入会日:</span> <span className="font-medium">{formatDate(selectedUser.joined_at)}</span></div>
               <div><span className="text-gray-500">アカウント発行日:</span> <span className="font-medium">{formatDate(selectedUser.account_issued_at)}</span></div>
               <div><span className="text-gray-500">デビュー日:</span> <span className="font-medium">{formatDate(selectedUser.debut_date)}</span></div>
