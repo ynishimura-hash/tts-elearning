@@ -46,6 +46,7 @@ export default function AdminUsersPage() {
     is_test: false, drive_folder_url: '',
     is_on_leave: false, withdrew_at: '',
     study_notify_enabled: true,
+    year2_unlocked: false, year3_unlocked: false,
   })
   const [saving, setSaving] = useState(false)
   const [pwInput, setPwInput] = useState('')
@@ -191,6 +192,8 @@ export default function AdminUsersPage() {
       is_on_leave: !!user.is_on_leave,
       withdrew_at: user.withdrew_at ? user.withdrew_at.split('T')[0] : '',
       study_notify_enabled: user.study_notify_enabled !== false,
+      year2_unlocked: user.year2_unlocked === true,
+      year3_unlocked: user.year3_unlocked === true,
     })
     setSelectedUser(null)
     setPwInput('')
@@ -341,6 +344,8 @@ export default function AdminUsersPage() {
       is_on_leave: editForm.is_on_leave,
       withdrew_at: editForm.withdrew_at || null,
       study_notify_enabled: editForm.study_notify_enabled,
+      year2_unlocked: editForm.year2_unlocked,
+      year3_unlocked: editForm.year3_unlocked,
     }).eq('id', editingUser.id)
 
     setSaving(false)
@@ -861,6 +866,8 @@ export default function AdminUsersPage() {
                   { key: 'is_test', label: 'テストアカウント' },
                   { key: 'is_on_leave', label: '休学中' },
                   { key: 'study_notify_enabled', label: '勉強会の通知を送る' },
+                  { key: 'year2_unlocked', label: '2年目コースを解放' },
+                  { key: 'year3_unlocked', label: '3年目コースを解放' },
                 ].map((opt) => (
                   <label key={opt.key} className="flex items-center gap-2 text-sm text-gray-700">
                     <input type="checkbox" checked={(editForm as Record<string, unknown>)[opt.key] as boolean}

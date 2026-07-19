@@ -7,7 +7,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { YouTubePlayer } from '@/components/YouTubePlayer'
 import { getYouTubeId } from '@/lib/utils'
-import { ArrowLeft, Play, CheckCircle2, FileText, Clock } from 'lucide-react'
+import { canViewCourse } from '@/lib/course-access'
+import { ArrowLeft, Play, CheckCircle2, FileText, Clock, Lock } from 'lucide-react'
 import type { Course, Content } from '@/types/database'
 
 export default function CourseDetailPage() {
@@ -16,6 +17,7 @@ export default function CourseDetailPage() {
   const [course, setCourse] = useState<Course | null>(null)
   const [contents, setContents] = useState<Content[]>([])
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set())
+  const [denied, setDenied] = useState(false)
 
   useEffect(() => {
     if (!user || !id) return
@@ -28,7 +30,14 @@ export default function CourseDetailPage() {
         .eq('id', id)
         .single()
 
-      if (courseData) setCourse(courseData)
+      if (courseData) {
+        setCourse(courseData)
+        // 未解放のコースは URL 直打ちでも開かせない（コンテンツも取得しない）
+        if (!canViewCourse(user, courseData)) {
+          setDenied(true)
+          return
+        }
+      }
 
       const { data: contentsData } = await supabase
         .from('contents')
@@ -51,6 +60,24 @@ export default function CourseDetailPage() {
 
     fetchData()
   }, [user, id])
+
+  if (denied) {
+    return (
+      <div className="space-y-6 pt-12 lg:pt-0">
+        <Link href="/courses" className="inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline">
+          <ArrowLeft className="w-4 h-4" />
+          コース一覧に戻る
+        </Link>
+        <div className="bg-white rounded-xl p-10 shadow-sm text-center">
+          <Lock className="w-10 h-10 text-gray-400 mx-auto mb-4" />
+          <h1 className="text-lg font-bold text-gray-800 mb-2">このコースはまだ閲覧できません</h1>
+          <p className="text-sm text-gray-500">
+            解放時期になると自動的に閲覧できるようになります。
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   if (!course) {
     return (

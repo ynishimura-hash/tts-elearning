@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useUser } from '@/lib/hooks/useUser'
 import { BookOpen, Lock, ChevronRight, Download } from 'lucide-react'
 import { daysSince } from '@/lib/utils'
+import { canViewCourse, isYear2Unlocked, isYear3Unlocked, YEAR2_UNLOCK_DAYS, YEAR3_UNLOCK_DAYS } from '@/lib/course-access'
 import type { Course } from '@/types/database'
 
 export default function CoursesPage() {
@@ -81,7 +82,7 @@ export default function CoursesPage() {
           {courses
             .filter(c => !c.is_2nd_year && !c.is_3rd_year)
             .map((course) => {
-              const locked = course.viewable_after_days > elapsed
+              const locked = !canViewCourse(user, course)
               const total = contentCounts[course.id] || 0
               const done = progressCounts[course.id] || 0
               const percent = total > 0 ? Math.round((done / total) * 100) : 0
@@ -143,16 +144,16 @@ export default function CoursesPage() {
       {courses.some(c => c.is_2nd_year) && (
         <div>
           <h2 className="text-lg font-bold text-[#384a8f] mb-3">2年目以降コース</h2>
-          {elapsed < 365 && (
+          {!isYear2Unlocked(user) && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-3">
               <p className="text-sm text-yellow-700">
-                2年目以降のコースは、受講開始から1年経過後に閲覧可能になります（残り{365 - elapsed}日）
+                2年目以降のコースは、受講開始から1年経過後に閲覧可能になります（残り{YEAR2_UNLOCK_DAYS - elapsed}日）
               </p>
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {courses.filter(c => c.is_2nd_year).map((course) => {
-              const locked = elapsed < 365
+              const locked = !canViewCourse(user, course)
               const total = contentCounts[course.id] || 0
               const done = progressCounts[course.id] || 0
               const percent = total > 0 ? Math.round((done / total) * 100) : 0
@@ -189,16 +190,16 @@ export default function CoursesPage() {
       {courses.some(c => c.is_3rd_year) && (
         <div>
           <h2 className="text-lg font-bold text-[#384a8f] mb-3">3年目以降コース</h2>
-          {elapsed < 730 && (
+          {!isYear3Unlocked(user) && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-3">
               <p className="text-sm text-yellow-700">
-                3年目以降のコースは、受講開始から2年経過後に閲覧可能になります（残り{730 - elapsed}日）
+                3年目以降のコースは、受講開始から2年経過後に閲覧可能になります（残り{YEAR3_UNLOCK_DAYS - elapsed}日）
               </p>
             </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {courses.filter(c => c.is_3rd_year).map((course) => {
-              const locked = elapsed < 730
+              const locked = !canViewCourse(user, course)
               return (
                 <div key={course.id} className="relative">
                   {locked && (

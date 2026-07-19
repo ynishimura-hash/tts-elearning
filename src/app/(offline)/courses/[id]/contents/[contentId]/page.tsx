@@ -8,9 +8,10 @@ import { useUser } from '@/lib/hooks/useUser'
 import { YouTubePlayer } from '@/components/YouTubePlayer'
 import { QuizModal } from '@/components/QuizModal'
 import { getYouTubeId } from '@/lib/utils'
+import { canViewCourse } from '@/lib/course-access'
 import {
   ArrowLeft, ArrowRight, CheckCircle2, FileText,
-  ExternalLink, AlertCircle, Play, PlayCircle, Menu, X, Clock
+  ExternalLink, AlertCircle, Play, PlayCircle, Menu, X, Clock, Lock
 } from 'lucide-react'
 import type { Content } from '@/types/database'
 
@@ -28,6 +29,7 @@ export default function ContentViewPage() {
   const [prevContent, setPrevContent] = useState<Content | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [courseName, setCourseName] = useState('')
+  const [denied, setDenied] = useState(false)
 
   // contentId変更時にリセット＆最上部にスクロール
   useEffect(() => {
@@ -40,6 +42,21 @@ export default function ContentViewPage() {
     const supabase = createClient()
 
     async function fetchData() {
+      // コースの解放状況を先に確認する（未解放なら教材を一切取得しない）
+      const { data: courseData } = await supabase
+        .from('courses')
+        .select('name, is_2nd_year, is_3rd_year, viewable_after_days')
+        .eq('id', courseId)
+        .single()
+
+      if (courseData) {
+        setCourseName(courseData.name)
+        if (!canViewCourse(user, courseData)) {
+          setDenied(true)
+          return
+        }
+      }
+
       // コンテンツ取得
       const { data: contentData } = await supabase
         .from('contents')
@@ -48,15 +65,6 @@ export default function ContentViewPage() {
         .single()
 
       if (contentData) setContent(contentData)
-
-      // コース名取得
-      const { data: courseData } = await supabase
-        .from('courses')
-        .select('name')
-        .eq('id', courseId)
-        .single()
-
-      if (courseData) setCourseName(courseData.name)
 
       // 同コースの全コンテンツ
       const { data: contents } = await supabase
@@ -151,6 +159,24 @@ export default function ContentViewPage() {
       await updateProgress('video_completed')
     }
   }, [progress.video, updateProgress])
+
+  if (denied) {
+    return (
+      <div className="space-y-6 pt-12 lg:pt-0">
+        <Link href="/courses" className="inline-flex items-center gap-1 text-sm text-[#384a8f] hover:underline">
+          <ArrowLeft className="w-4 h-4" />
+          コース一覧に戻る
+        </Link>
+        <div className="bg-white rounded-xl p-10 shadow-sm text-center">
+          <Lock className="w-10 h-10 text-gray-400 mx-auto mb-4" />
+          <h1 className="text-lg font-bold text-gray-800 mb-2">この教材はまだ閲覧できません</h1>
+          <p className="text-sm text-gray-500">
+            解放時期になると自動的に閲覧できるようになります。
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   if (!content) {
     return (

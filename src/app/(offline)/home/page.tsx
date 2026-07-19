@@ -10,6 +10,7 @@ import { UpcomingSessionsList } from '@/components/UpcomingSessionsList'
 import { LineLinkButton } from '@/components/LineLinkButton'
 import { BookOpen, CalendarDays, TrendingUp, Bell, ChevronRight, CheckCircle2, XCircle, Clock, MapPin, AlertCircle } from 'lucide-react'
 import { formatDate, formatDateWithWeekday, daysSince, isUpcomingSession } from '@/lib/utils'
+import { canViewCourse } from '@/lib/course-access'
 import { PieChart, Pie, ResponsiveContainer } from 'recharts'
 import type { Course, StudySession, StudySessionAttendance, Announcement } from '@/types/database'
 
@@ -42,13 +43,7 @@ export default function HomePage() {
         .order('sort_order')
 
       if (coursesData) {
-        const elapsed = daysSince(user!.account_issued_at)
-        const filtered = coursesData.filter(c => {
-          if (c.is_2nd_year && elapsed < 365) return false
-          if (c.is_3rd_year && elapsed < 730) return false
-          return c.viewable_after_days <= elapsed
-        })
-        setCourses(filtered)
+        setCourses(coursesData.filter(c => canViewCourse(user, c)))
       }
 
       // 勉強会（カレンダー用に前後数ヶ月の範囲を取得）
